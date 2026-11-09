@@ -13,12 +13,12 @@ class PlayerService : MediaSessionService() {
     private var session: MediaSession? = null
 
     companion object {
+        // ExoPlayer will set this when a real track is ready
         val audioSessionId = MutableStateFlow(0)
     }
 
     override fun onCreate() {
         super.onCreate()
-
         val attrs = AudioAttributes.Builder()
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .setUsage(C.USAGE_MEDIA)
@@ -31,6 +31,7 @@ class PlayerService : MediaSessionService() {
 
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                // Ignore the temporary 0 ID during transitions
                 if (audioSessionId != 0) PlayerService.audioSessionId.value = audioSessionId
             }
         })

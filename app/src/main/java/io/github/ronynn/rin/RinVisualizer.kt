@@ -36,23 +36,23 @@ fun rememberWaveform(sessionId: Int, isPlaying: Boolean): State<FloatArray> {
         if (isPlaying && sessionId > 0 && hasPermission) {
             viz = runCatching {
                 Visualizer(sessionId).apply {
-                    captureSize = Visualizer.getCaptureSizeRange()[1]
+                    captureSize = Visualizer.getCaptureSizeRange()[1] // Max 1024
                     setDataCaptureListener(
                         object : Visualizer.OnDataCaptureListener {
                             override fun onWaveFormDataCapture(
                                 v: Visualizer?, data: ByteArray?, rate: Int
                             ) {
                                 data ?: return
-                                // must copy inside callback; buffer is reused
+                                // 8-bit unsigned -> -1f .. 1f. Copy inside callback.
                                 wave.value = FloatArray(data.size) {
                                     (data[it].toInt() and 0xFF) / 128f - 1f
                                 }
                             }
                             override fun onFftDataCapture(v: Visualizer?, fft: ByteArray?, rate: Int) {}
                         },
-                        Visualizer.getMaxCaptureRate() / 2,
-                        true,   // waveform
-                        false   // fft
+                        Visualizer.getMaxCaptureRate() / 2, // ~30fps
+                        true,  // waveform
+                        false  // no FFT
                     )
                     enabled = true
                 }
@@ -74,6 +74,7 @@ fun RinVisualizer(wave: State<FloatArray>, isPlaying: Boolean, modifier: Modifie
         val mid = size.height / 2f
         val w = wave.value
 
+        // Flat line when paused or if visualizer hasn't started
         if (!isPlaying || w.isEmpty()) {
             drawLine(c.fg, Offset(0f, mid), Offset(size.width, mid),
                 strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
@@ -81,10 +82,12 @@ fun RinVisualizer(wave: State<FloatArray>, isPlaying: Boolean, modifier: Modifie
         }
 
         val step = size.width / w.size
+        // Draw main wave
         val main = Path().apply {
             moveTo(0f, mid + w[0] * mid * 0.95f)
             for (i in 1 until w.size) lineTo(i * step, mid + w[i] * mid * 0.95f)
         }
+        // Draw mirrored reflection
         val refl = Path().apply {
             moveTo(0f, size.height - (mid + w[0] * mid * 0.95f))
             for (i in 1 until w.size) lineTo(i * step, size.height - (mid + w[i] * mid * 0.95f))
@@ -93,9 +96,11 @@ fun RinVisualizer(wave: State<FloatArray>, isPlaying: Boolean, modifier: Modifie
         val cap = StrokeCap.Round
         val join = StrokeJoin.Round
 
+        // Glow layers
         drawPath(refl, c.accent.copy(alpha = 0.22f), style = Stroke(2.dp.toPx(), cap = cap, join = join))
         drawPath(main, c.accent.copy(alpha = 0.12f), style = Stroke(10.dp.toPx(), cap = cap, join = join))
         drawPath(main, c.accent.copy(alpha = 0.20f), style = Stroke(6.dp.toPx(), cap = cap, join = join))
+        // Main line
         drawPath(main, c.fg, style = Stroke(2.5.dp.toPx(), cap = cap, join = join))
     }
 }

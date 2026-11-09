@@ -3,6 +3,7 @@ package io.github.ronynn.rin
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -16,13 +17,21 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.compose.ui.graphics.toArgb
 
 class MainActivity : ComponentActivity() {
     private val vm: PlayerViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()   // draw behind status + nav bars, then inset
+
+        // Match window background to stored theme so no black flash before Compose draws
+        val prefs = getSharedPreferences("rin", 0)
+        val themeIdx = prefs.getInt("theme", 0)
+        val colors = Themes.getOrNull(themeIdx)?.second ?: Themes[0].second
+        window.setBackgroundDrawable(ColorDrawable(colors.bg.toArgb()))
+
+        enableEdgeToEdge()
 
         setContent {
             val context = LocalContext.current
@@ -36,7 +45,6 @@ class MainActivity : ComponentActivity() {
 
             LaunchedEffect(Unit) {
                 vm.connect()
-
                 val mediaPerm = if (Build.VERSION.SDK_INT >= 33)
                     Manifest.permission.READ_MEDIA_AUDIO
                 else Manifest.permission.READ_EXTERNAL_STORAGE
@@ -48,7 +56,6 @@ class MainActivity : ComponentActivity() {
                 val missing = needed.filter {
                     ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
                 }
-
                 if (missing.isEmpty()) vm.scanDevice()
                 else permLauncher.launch(missing.toTypedArray())
             }

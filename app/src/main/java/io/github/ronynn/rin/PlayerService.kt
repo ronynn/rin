@@ -1,11 +1,14 @@
-// app/src/main/java/io/github/ronynn/rin/PlayerService.kt
 package io.github.ronynn.rin
 
+import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,19 +22,30 @@ class PlayerService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+
         val sid = (getSystemService(AUDIO_SERVICE) as AudioManager).generateAudioSessionId()
         audioSessionId.value = sid
 
-        val player = ExoPlayer.Builder(this)
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                    .setUsage(C.USAGE_MEDIA)
-                    .build(),
-                true
-            )
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): AudioSink? {
+                return DefaultAudioSink.Builder(context)
+                    .setAudioSessionId(sid)
+                    .build()
+            }
+        }
+
+        val attrs = AudioAttributes.Builder()
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .setUsage(C.USAGE_MEDIA)
+            .build()
+
+        val player = ExoPlayer.Builder(this, renderersFactory)
+            .setAudioAttributes(attrs, true)
             .setHandleAudioBecomingNoisy(true)
-            .setAudioSessionId(sid)
             .build()
 
         session = MediaSession.Builder(this, player).build()

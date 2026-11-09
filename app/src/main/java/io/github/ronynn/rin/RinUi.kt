@@ -1,4 +1,3 @@
-// app/src/main/java/io/github/ronynn/rin/RinUi.kt
 package io.github.ronynn.rin
 
 import android.Manifest
@@ -67,6 +66,11 @@ fun PlayerScreen(vm: PlayerViewModel) {
         else permLauncher.launch(perm)
     }
 
+    val openFile: () -> Unit = { filePicker.launch(arrayOf("audio/*", "application/ogg")) }
+    val pickCover: () -> Unit = {
+        coverPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize().background(c.bg).padding(8.dp)) {
         val twoCol = maxWidth >= 800.dp || (maxWidth >= 600.dp && maxWidth > maxHeight)
         val coverSize = when {
@@ -83,15 +87,17 @@ fun PlayerScreen(vm: PlayerViewModel) {
         if (twoCol) {
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SettingsPanel(vm, filePicker)
+                    SettingsPanel(vm, onOpenFile = openFile)
                     PlaylistPanel(vm, Modifier.weight(1f))
                 }
-                PlayerPanel(vm, coverPicker, coverSize, visHeight, Modifier.weight(1f).fillMaxHeight())
+                PlayerPanel(vm, coverSize, visHeight, onCoverClick = pickCover,
+                    modifier = Modifier.weight(1f).fillMaxHeight())
             }
         } else {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                SettingsPanel(vm, filePicker)
-                PlayerPanel(vm, coverPicker, coverSize, visHeight, Modifier.fillMaxWidth())
+                SettingsPanel(vm, onOpenFile = openFile)
+                PlayerPanel(vm, coverSize, visHeight, onCoverClick = pickCover,
+                    modifier = Modifier.fillMaxWidth())
                 PlaylistPanel(vm, Modifier.weight(1f))
             }
         }
@@ -123,7 +129,12 @@ private fun Fieldset(legend: String, modifier: Modifier = Modifier, content: @Co
 }
 
 @Composable
-private fun RinButton(text: String, modifier: Modifier = Modifier, selected: Boolean = false, onClick: () -> Unit) {
+private fun RinButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    onClick: () -> Unit
+) {
     val c = LocalRinColors.current
     OutlinedButton(
         onClick = onClick,
@@ -136,15 +147,20 @@ private fun RinButton(text: String, modifier: Modifier = Modifier, selected: Boo
         ),
         contentPadding = PaddingValues(0.dp)
     ) {
-        Text(text, style = TextStyle(
-            fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold,
-            fontSize = 12.sp, maxLines = 1
-        ))
+        Text(
+            text = text,
+            style = TextStyle(
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp
+            ),
+            maxLines = 1
+        )
     }
 }
 
 @Composable
-private fun SettingsPanel(vm: PlayerViewModel, filePicker: () -> Unit) {
+private fun SettingsPanel(vm: PlayerViewModel, onOpenFile: () -> Unit) {
     val c = LocalRinColors.current
     Fieldset("./Settings/") {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -162,13 +178,19 @@ private fun SettingsPanel(vm: PlayerViewModel, filePicker: () -> Unit) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             RinButton("RESCAN", Modifier.weight(1f)) { vm.scanDevice() }
-            RinButton("OPEN FILE", Modifier.weight(1f), onClick = filePicker)
+            RinButton("OPEN FILE", Modifier.weight(1f), onClick = onOpenFile)
         }
         if (vm.status.isNotEmpty()) {
-            Text(vm.status, Modifier.fillMaxWidth(),
-                style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 10.sp,
-                    letterSpacing = 1.sp, color = c.accent),
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                text = vm.status,
+                modifier = Modifier.fillMaxWidth(),
+                style = TextStyle(
+                    fontFamily = FontFamily.Monospace, fontSize = 10.sp,
+                    letterSpacing = 1.sp, color = c.accent
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -176,9 +198,9 @@ private fun SettingsPanel(vm: PlayerViewModel, filePicker: () -> Unit) {
 @Composable
 private fun PlayerPanel(
     vm: PlayerViewModel,
-    coverPicker: androidx.activity.result.ActivityResultLauncher<PickVisualMediaRequest>,
     coverSize: Dp,
     visHeight: Dp,
+    onCoverClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val c = LocalRinColors.current
@@ -189,12 +211,7 @@ private fun PlayerPanel(
     Fieldset("./Player/", modifier) {
         Row(Modifier.fillMaxWidth().height(coverSize).border(2.dp, c.border).background(c.bg)) {
             Box(
-                Modifier.size(coverSize - 4.dp).border(2.dp, c.border)
-                    .clickable {
-                        coverPicker.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    },
+                Modifier.size(coverSize - 4.dp).border(2.dp, c.border).clickable(onClick = onCoverClick),
                 contentAlignment = Alignment.Center
             ) {
                 if (track != null) {
@@ -215,17 +232,26 @@ private fun PlayerPanel(
                 Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.Center
             ) {
-                Text(track?.title ?: "NO TRACK LOADED",
-                    style = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp, color = c.fg, lineHeight = 17.sp),
-                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    text = track?.title ?: "NO TRACK LOADED",
+                    style = TextStyle(
+                        fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp, color = c.fg, lineHeight = 17.sp
+                    ),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Spacer(Modifier.height(4.dp))
-                Text(track?.artist ?: "UNKNOWN ARTIST",
+                Text(
+                    text = track?.artist ?: "UNKNOWN ARTIST",
                     style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.5.sp, color = c.accent),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(track?.album ?: "UNKNOWN ALBUM",
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = track?.album ?: "UNKNOWN ALBUM",
                     style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.5.sp, color = c.accent),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
             }
         }
 
@@ -237,26 +263,32 @@ private fun PlayerPanel(
             TransportButton("◀◀") { vm.previous() }
             Spacer(Modifier.width(15.dp))
             Box(
-                Modifier.size(42.dp)
-                    .border(2.dp, c.border, CircleShape)
-                    .background(c.bg)
-                    .clickable { vm.togglePlay() },
+                Modifier.size(42.dp).border(2.dp, c.border, CircleShape)
+                    .background(c.bg).clickable { vm.togglePlay() },
                 contentAlignment = Alignment.Center
             ) {
-                Text(if (vm.isPlaying) "❚❚" else "▶",
-                    style = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp, color = c.fg))
+                Text(
+                    text = if (vm.isPlaying) "❚❚" else "▶",
+                    style = TextStyle(
+                        fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp, color = c.fg
+                    )
+                )
             }
             Spacer(Modifier.width(15.dp))
             TransportButton("▶▶") { vm.next() }
         }
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(vm.format(vm.positionMs), style = TextStyle(
-                fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = c.fg))
+            Text(
+                text = vm.format(vm.positionMs),
+                style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = c.fg)
+            )
             ProgressBar(vm.progress, Modifier.weight(1f)) { vm.seekToFraction(it) }
-            Text(vm.format(vm.durationMs), style = TextStyle(
-                fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = c.fg))
+            Text(
+                text = vm.format(vm.durationMs),
+                style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = c.fg)
+            )
         }
     }
 }
@@ -264,9 +296,14 @@ private fun PlayerPanel(
 @Composable
 private fun TransportButton(label: String, onClick: () -> Unit) {
     val c = LocalRinColors.current
-    Text(label, Modifier.clickable { onClick() }.padding(6.dp),
-        style = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold,
-            fontSize = 20.sp, color = c.fg))
+    Text(
+        text = label,
+        modifier = Modifier.clickable { onClick() }.padding(6.dp),
+        style = TextStyle(
+            fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold,
+            fontSize = 20.sp, color = c.fg
+        )
+    )
 }
 
 @Composable
@@ -290,8 +327,12 @@ private fun PlaylistPanel(vm: PlayerViewModel, modifier: Modifier = Modifier) {
     Fieldset("./Playlist/", modifier) {
         if (vm.tracks.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("NO TRACKS FOUND", style = TextStyle(
-                    fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = c.accent))
+                Text(
+                    text = "NO TRACKS FOUND",
+                    style = TextStyle(
+                        fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = c.accent
+                    )
+                )
             }
         } else {
             LazyColumn(Modifier.fillMaxSize().border(2.dp, c.border).background(c.bg)) {
@@ -304,21 +345,31 @@ private fun PlaylistPanel(vm: PlayerViewModel, modifier: Modifier = Modifier) {
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("${(i + 1).toString().padStart(2, '0')}. ${t.title}",
-                            Modifier.weight(1f),
-                            style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp,
+                        Text(
+                            text = "${(i + 1).toString().padStart(2, '0')}. ${t.title}",
+                            modifier = Modifier.weight(1f),
+                            style = TextStyle(
+                                fontFamily = FontFamily.Monospace, fontSize = 11.sp,
                                 fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                color = if (active) c.bg else c.fg),
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                color = if (active) c.bg else c.fg
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                         Box(
                             Modifier.width(22.dp).height(18.dp)
                                 .border(2.dp, if (active) c.bg else c.accent)
                                 .clickable { vm.removeAt(i) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("✕", style = TextStyle(fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                                color = if (active) c.bg else c.accent))
+                            Text(
+                                text = "✕",
+                                style = TextStyle(
+                                    fontFamily = FontFamily.Monospace, fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (active) c.bg else c.accent
+                                )
+                            )
                         }
                     }
                     HorizontalDivider(color = c.listHover, thickness = 1.dp)

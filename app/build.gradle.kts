@@ -33,7 +33,6 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 
-    // one block only, applies to debug AND release
     splits {
         abi {
             isEnable = true
@@ -46,7 +45,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            isMinifyEnabled = true          // R8 runs on debug too
+            isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -92,5 +91,5 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.media3:media3-exoplayer:1.5.0")
     implementation("androidx.media3:media3-session:1.5.0")
-    implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
+    implementation("sh.calvin.reorderable:reorderable:2.4.0")
 }

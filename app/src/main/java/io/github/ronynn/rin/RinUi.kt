@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -40,10 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.burnoutcrew.composereorderable.ReorderableItem
-import org.burnoutcrew.composereorderable.detectReorderAfterLongPress
-import org.burnoutcrew.composereorderable.rememberReorderableLazyListState
-import org.burnoutcrew.composereorderable.reorderable
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 private object BitmapCache {
     private val map = HashMap<String, Bitmap>()
@@ -64,7 +63,9 @@ private fun RinImage(model: Any?, modifier: Modifier = Modifier) {
         BitmapCache.get(key)?.let { bmp = it; return@LaunchedEffect }
         bmp = withContext(Dispatchers.IO) {
             runCatching {
-                context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                context.contentResolver.openInputStream(uri)?.use {
+                    BitmapFactory.decodeStream(it)
+                }
             }.getOrNull()
         }
         bmp?.let { BitmapCache.put(key, it) }
@@ -161,10 +162,11 @@ fun PlayerScreen(vm: PlayerViewModel) {
 
     val openFile: () -> Unit = { filePicker.launch(arrayOf("audio/*", "application/ogg")) }
     val pickCover: () -> Unit = {
-        coverPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        coverPicker.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
     }
 
-    // No padding after safeDrawingPadding => borders sit flush against safe area
     BoxWithConstraints(
         Modifier.fillMaxSize().background(c.bg).safeDrawingPadding()
     ) {
@@ -219,9 +221,11 @@ private fun SettingsPanel(vm: PlayerViewModel, onOpenFile: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     row.forEach { (name, _) ->
                         val idx = Themes.indexOfFirst { it.first == name }
-                        RinButton(name.uppercase(), Modifier.weight(1f), vm.themeIndex == idx) {
-                            vm.setTheme(idx)
-                        }
+                        RinButton(
+                            name.uppercase(),
+                            Modifier.weight(1f),
+                            vm.themeIndex == idx
+                        ) { vm.setTheme(idx) }
                     }
                     repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
@@ -234,7 +238,6 @@ private fun SettingsPanel(vm: PlayerViewModel, onOpenFile: () -> Unit) {
             ) { vm.rescan() }
             RinButton("OPEN FILE", Modifier.weight(1f), onClick = onOpenFile)
         }
-        // Fixed-height status row so appearing/disappearing text never shifts layout
         Box(Modifier.height(14.dp).fillMaxWidth()) {
             if (vm.status.isNotEmpty()) {
                 Text(
@@ -337,10 +340,15 @@ private fun PlayerPanel(
         }
 
         if (landscape) {
-            // Fills the remaining vertical space => thick visualizer in landscape
-            RinVisualizer(wave, vm.isPlaying, Modifier.fillMaxWidth().weight(1f))
+            RinVisualizer(
+                wave, vm.isPlaying,
+                Modifier.fillMaxWidth().weight(1f)
+            )
         } else {
-            RinVisualizer(wave, vm.isPlaying, Modifier.fillMaxWidth().height(visHeight))
+            RinVisualizer(
+                wave, vm.isPlaying,
+                Modifier.fillMaxWidth().height(visHeight)
+            )
         }
 
         Row(
@@ -438,7 +446,7 @@ private fun PlaylistPanel(vm: PlayerViewModel, modifier: Modifier = Modifier) {
         val showLoading = !vm.hasScanned || vm.isScanning
 
         when {
-            showLoading -> Box(Modifier.fillMaxSize()) // blank: avoids "NO TRACKS" flash on startup
+            showLoading -> Box(Modifier.fillMaxSize())
             showEmpty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     "NO TRACKS FOUND",
@@ -450,24 +458,30 @@ private fun PlaylistPanel(vm: PlayerViewModel, modifier: Modifier = Modifier) {
                 )
             }
             else -> {
-                val state = rememberReorderableLazyListState(onMove = { from, to ->
+                val lazyListState = rememberLazyListState()
+                val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
                     vm.moveTrack(from.index, to.index)
-                })
+                }
 
                 LazyColumn(
-                    state = state.listState,
+                    state = lazyListState,
                     modifier = Modifier
                         .fillMaxSize()
                         .border(2.dp, c.border)
                         .background(c.bg)
-                        .reorderable(state)
-                        .detectReorderAfterLongPress(state)
                 ) {
-                    itemsIndexed(vm.tracks, key = { _, t -> t.uri.toString() }) { i, t ->
-                        ReorderableItem(state, key = t.uri.toString()) { isDragging ->
+                    itemsIndexed(
+                        items = vm.tracks,
+                        key = { _, t -> t.uri.toString() }
+                    ) { i, t ->
+                        ReorderableItem(
+                            state = reorderState,
+                            key = t.uri.toString()
+                        ) { isDragging ->
                             val active = i == vm.currentIndex
                             Row(
-                                Modifier.fillMaxWidth()
+                                Modifier
+                                    .fillMaxWidth()
                                     .background(
                                         when {
                                             isDragging -> c.listHover
@@ -501,6 +515,7 @@ private fun PlaylistPanel(vm: PlayerViewModel, modifier: Modifier = Modifier) {
                                 )
                                 Text(
                                     "☰",
+                                    modifier = Modifier.longPressDraggableHandle(),
                                     style = TextStyle(
                                         fontSize = 16.sp,
                                         color = if (active) c.bg else c.accent

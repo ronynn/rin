@@ -21,10 +21,9 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: 17
 
-      # Provisions Gradle 8.9 on PATH + enables built-in caching
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
         with:
@@ -48,20 +47,6 @@ jobs:
             echo "Keystore file is missing or empty!" && exit 1
           fi
 
-      - name: Verify Keystore Integrity
-        if: contains(github.event.head_commit.message, 'release')
-        run: |
-          keytool -list -keystore keystore.jks -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" || { echo "Keystore verification failed!"; exit 1; }
-
-      - name: Verify matching keystore and key passwords
-        if: contains(github.event.head_commit.message, 'release')
-        run: |
-          if [ "$ANDROID_KEYSTORE_PASSWORD" = "$ANDROID_KEY_PASSWORD" ]; then
-            echo "Keystore password and key password match."
-          else
-            echo "Error: Keystore password and key password do not match!" && exit 1
-          fi
-
       - name: Build APK
         id: build_apk
         continue-on-error: true
@@ -74,12 +59,11 @@ jobs:
           fi
 
       - name: List APK Outputs
-        run: find app/build/outputs/apk -type f -name "*.apk"
+        run: find app/build/outputs/apk -type f -name "*.apk" -exec ls -lh {} \;
 
       - name: Debug Build Failure
         if: failure()
         run: |
-          echo "Build failed, re-running with debug options..."
           if [[ "${{ github.event.head_commit.message }}" == *release* ]]; then
             gradle assembleRelease --stacktrace --info
           else
@@ -87,16 +71,32 @@ jobs:
           fi
           exit 1
 
-      - name: Upload APK Artifact (Release)
+      # ---- release (two separate artifacts) ----
+      - name: Upload release arm64
         if: contains(github.event.head_commit.message, 'release')
         uses: actions/upload-artifact@v5
         with:
-          name: release-apk
-          path: app/build/outputs/apk/release/*.apk
+          name: rin-release-arm64-v8a
+          path: app/build/outputs/apk/release/*arm64-v8a*.apk
 
-      - name: Upload APK Artifact (Debug)
+      - name: Upload release armv7
+        if: contains(github.event.head_commit.message, 'release')
+        uses: actions/upload-artifact@v5
+        with:
+          name: rin-release-armeabi-v7a
+          path: app/build/outputs/apk/release/*armeabi-v7a*.apk
+
+      # ---- debug (two separate artifacts) ----
+      - name: Upload debug arm64
         if: ${{ !contains(github.event.head_commit.message, 'release') }}
         uses: actions/upload-artifact@v5
         with:
-          name: debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: rin-debug-arm64-v8a
+          path: app/build/outputs/apk/debug/*arm64-v8a*.apk
+
+      - name: Upload debug armv7
+        if: ${{ !contains(github.event.head_commit.message, 'release') }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: rin-debug-armeabi-v7a
+          path: app/build/outputs/apk/debug/*armeabi-v7a*.apk

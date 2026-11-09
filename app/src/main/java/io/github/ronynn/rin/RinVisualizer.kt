@@ -1,6 +1,7 @@
-// app/src/main/java/io/github/ronynn/rin/RinVisualizer.kt
 package io.github.ronynn.rin
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.media.audiofx.Visualizer
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -16,31 +17,48 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 
 @Composable
 fun rememberWaveform(sessionId: Int, isPlaying: Boolean): State<FloatArray> {
+    val context = LocalContext.current
     val wave = remember { mutableStateOf(FloatArray(0)) }
-    DisposableEffect(sessionId, isPlaying) {
+
+    val hasPermission = ContextCompat.checkSelfPermission(
+        context, Manifest.permission.RECORD_AUDIO
+    ) == PackageManager.PERMISSION_GRANTED
+
+    DisposableEffect(sessionId, isPlaying, hasPermission) {
         var viz: Visualizer? = null
-        if (isPlaying && sessionId != 0 && sessionId != -1) {
+
+        if (isPlaying && sessionId > 0 && hasPermission) {
             viz = runCatching {
                 Visualizer(sessionId).apply {
                     captureSize = Visualizer.getCaptureSizeRange()[1]
                     setDataCaptureListener(
                         object : Visualizer.OnDataCaptureListener {
-                            override fun onWaveFormDataCapture(v: Visualizer?, data: ByteArray?, rate: Int) {
+                            override fun onWaveFormDataCapture(
+                                v: Visualizer?, data: ByteArray?, rate: Int
+                            ) {
                                 data ?: return
-                                wave.value = FloatArray(data.size) { (data[it].toInt() and 0xFF) / 128f - 1f }
+                                // must copy inside callback; buffer is reused
+                                wave.value = FloatArray(data.size) {
+                                    (data[it].toInt() and 0xFF) / 128f - 1f
+                                }
                             }
                             override fun onFftDataCapture(v: Visualizer?, fft: ByteArray?, rate: Int) {}
                         },
-                        Visualizer.getMaxCaptureRate() / 2, true, false
+                        Visualizer.getMaxCaptureRate() / 2,
+                        true,   // waveform
+                        false   // fft
                     )
                     enabled = true
                 }
             }.getOrNull()
         }
+
         onDispose {
             viz?.run { enabled = false; release() }
             if (!isPlaying) wave.value = FloatArray(0)
@@ -71,6 +89,7 @@ fun RinVisualizer(wave: State<FloatArray>, isPlaying: Boolean, modifier: Modifie
             moveTo(0f, size.height - (mid + w[0] * mid * 0.95f))
             for (i in 1 until w.size) lineTo(i * step, size.height - (mid + w[i] * mid * 0.95f))
         }
+
         val cap = StrokeCap.Round
         val join = StrokeJoin.Round
 

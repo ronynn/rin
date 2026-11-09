@@ -1,4 +1,3 @@
-// app/src/main/java/io/github/ronynn/rin/PlayerViewModel.kt
 package io.github.ronynn.rin
 
 import android.app.Application
@@ -8,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import androidx.core.content.ContextCompat
@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 class PlayerViewModel(app: Application) : AndroidViewModel(app) {
+
     val tracks: SnapshotStateList<Track> = mutableListOf<Track>().toMutableStateList()
     var currentIndex by mutableIntStateOf(-1)
     var isPlaying by mutableStateOf(false)
@@ -36,16 +37,26 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     var status by mutableStateOf("")
     var themeIndex by mutableIntStateOf(0)
     var coverVersion by mutableIntStateOf(0)
+    var isScanning by mutableStateOf(false)
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
+    private val prefs get() = getApplication<Application>().getSharedPreferences("rin", 0)
 
     init {
-        val prefs = app.getSharedPreferences("rin", 0)
         themeIndex = prefs.getInt("theme", 0)
     }
 
     val currentTrack: Track? get() = tracks.getOrNull(currentIndex)
+
+    private fun hiddenIds(): MutableSet<Long> =
+        prefs.getStringSet("hidden", emptySet())!!
+            .mapNotNull { it.toLongOrNull() }
+            .toMutableSet()
+
+    private fun saveHidden(ids: Set<Long>) {
+        prefs.edit().putStringSet("hidden", ids.map { it.toString() }.toSet()).apply()
+    }
 
     fun connect() {
         if (controller != null) return
@@ -66,13 +77,37 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Normal scan: respects hidden list. */
     fun scanDevice() = viewModelScope.launch {
+        if (isScanning) return@launch
+        isScanning = true
         status = "SCANNING…"
         val found = withContext(Dispatchers.IO) { MediaLibrary.scan(getApplication()) }
-        tracks.clear()
-        tracks.addAll(found)
+        val hidden = hiddenIds()
+        val visible = found.filterNot { it.id in hidden }
+        Snapshot.withMutableSnapshot {
+            tracks.clear()
+            tracks.addAll(visible)
+        }
+        status = if (visible.isEmpty()) "NO MUSIC FOUND" else ""
+        if (controller != null && tracks.isNotEmpty() && currentIndex < 0) setQueue(0)
+        isScanning = false
+    }
+
+    /** Rescan from the RESCAN button: clears hidden set first, so deleted tracks come back. */
+    fun rescan() = viewModelScope.launch {
+        if (isScanning) return@launch
+        isScanning = true
+        status = "RESCANNING…"
+        saveHidden(emptySet()) // un-hide everything
+        val found = withContext(Dispatchers.IO) { MediaLibrary.scan(getApplication()) }
+        Snapshot.withMutableSnapshot {
+            tracks.clear()
+            tracks.addAll(found)
+        }
         status = if (found.isEmpty()) "NO MUSIC FOUND" else ""
         if (controller != null && tracks.isNotEmpty() && currentIndex < 0) setQueue(0)
+        isScanning = false
     }
 
     fun playExternalUri(uri: Uri) = viewModelScope.launch {
@@ -86,24 +121,29 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun setQueue(startIndex: Int) {
         val c = controller ?: return
-        val items = tracks.map {
+        val items = tracks.map { track ->
+            val artwork = coverFile(track).takeIf { it.exists() }?.let { Uri.fromFile(it) }
+                ?: track.albumArtUri
             MediaItem.Builder()
-                .setUri(it.uri)
+                .setUri(track.uri)
                 .setMediaMetadata(
                     MediaMetadata.Builder()
-                        .setTitle(it.title).setArtist(it.artist)
-                        .setAlbumTitle(it.album).setArtworkUri(coverModelUri(it))
+                        .setTitle(track.title)
+                        .setArtist(track.artist)
+                        .setAlbumTitle(track.album)
+                        .setArtworkUri(artwork)
                         .build()
                 )
                 .build()
         }
-        c.setMediaItems(items, startIndex, 0L)
+        c.setMediaItems(items, startIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0)), 0L)
         c.prepare()
         currentIndex = startIndex
     }
 
     fun playAt(i: Int) {
         val c = controller ?: return
+        if (i !in tracks.indices) return
         if (c.mediaItemCount == 0) setQueue(i) else c.seekToDefaultPosition(i)
         c.play()
     }
@@ -113,17 +153,30 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun previous() { controller?.let { it.seekToPreviousMediaItem(); it.play() } }
     fun seekToFraction(f: Float) { controller?.let { it.seekTo((it.duration * f).toLong()) } }
 
-    fun removeAt(i: Int) {
-        if (i < 0 || i >= tracks.size) return
-        tracks.removeAt(i)
-        controller?.removeMediaItem(i)
-        if (i == currentIndex) currentIndex = -1
-        else if (i < currentIndex) currentIndex--
+    fun removeAt(index: Int) {
+        val track = tracks.getOrNull(index) ?: return
+
+        val hidden = hiddenIds()
+        hidden.add(track.id)
+        saveHidden(hidden)
+
+        val wasCurrent = index == currentIndex
+        tracks.removeAt(index)
+
+        if (tracks.isEmpty()) {
+            controller?.clearMediaItems()
+            currentIndex = -1
+        } else {
+            val newIndex = if (wasCurrent) index.coerceAtMost(tracks.size - 1)
+                           else if (index < currentIndex) currentIndex - 1 else currentIndex
+            setQueue(newIndex)
+            if (!wasCurrent && controller?.isPlaying == true) controller?.play()
+        }
     }
 
     fun setTheme(i: Int) {
         themeIndex = i
-        getApplication<Application>().getSharedPreferences("rin", 0).edit().putInt("theme", i).apply()
+        prefs.edit().putInt("theme", i).apply()
     }
 
     private fun startTicker() = viewModelScope.launch {
@@ -146,18 +199,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun coverFile(track: Track): File =
         File(getApplication<Application>().filesDir, "covers/${track.stableKey.hashCode()}.img")
 
-    fun coverModelUri(track: Track): Uri {
-        val f = coverFile(track)
-        return if (f.exists()) Uri.fromFile(f) else track.albumArtUri
-    }
-
     fun coverModel(track: Track, version: Int): Any {
         val f = coverFile(track)
-        return if (f.exists()) {
-            Uri.fromFile(f).buildUpon()
-                .appendQueryParameter("v", version.toString())
-                .build()
-        } else track.albumArtUri
+        return if (f.exists()) Uri.fromFile(f).buildUpon()
+            .appendQueryParameter("v", version.toString()).build()
+        else track.albumArtUri
     }
 
     fun setCustomCover(uri: Uri) {
@@ -170,7 +216,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     f.outputStream().use { input.copyTo(it) }
                 }
             }
-            withContext(Dispatchers.Main) { coverVersion++ }
+            withContext(Dispatchers.Main) {
+                coverVersion++
+                val idx = currentIndex
+                if (idx >= 0) setQueue(idx)   // rebuild so notification artwork updates
+                controller?.play()
+            }
         }
     }
 

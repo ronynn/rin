@@ -32,9 +32,9 @@ class PlayerService : MediaSessionService() {
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean
             ): AudioSink? {
-                return DefaultAudioSink.Builder(context)
-                    .setAudioSessionId(sid)
-                    .build()
+                val sink = DefaultAudioSink.Builder(context).build()
+                sink.setAudioSessionId(sid)
+                return sink
             }
         }
 

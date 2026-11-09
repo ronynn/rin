@@ -43,9 +43,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private var controller: MediaController? = null
     private val prefs get() = getApplication<Application>().getSharedPreferences("rin", 0)
 
-    init {
-        themeIndex = prefs.getInt("theme", 0)
-    }
+    init { themeIndex = prefs.getInt("theme", 0) }
 
     val currentTrack: Track? get() = tracks.getOrNull(currentIndex)
 
@@ -77,7 +75,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Normal scan: respects hidden list. */
+    /** Normal scan — respects the persisted hidden set. */
     fun scanDevice() = viewModelScope.launch {
         if (isScanning) return@launch
         isScanning = true
@@ -94,12 +92,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         isScanning = false
     }
 
-    /** Rescan from the RESCAN button: clears hidden set first, so deleted tracks come back. */
+    /** RESCAN button — clears the hidden set first so deleted tracks return. */
     fun rescan() = viewModelScope.launch {
         if (isScanning) return@launch
         isScanning = true
         status = "RESCANNING…"
-        saveHidden(emptySet()) // un-hide everything
+        saveHidden(emptySet())
         val found = withContext(Dispatchers.IO) { MediaLibrary.scan(getApplication()) }
         Snapshot.withMutableSnapshot {
             tracks.clear()
@@ -111,7 +109,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun playExternalUri(uri: Uri) = viewModelScope.launch {
-        val t = withContext(Dispatchers.IO) { MediaLibrary.fromUri(getApplication(), uri) } ?: return@launch
+        val t = withContext(Dispatchers.IO) {
+            MediaLibrary.fromUri(getApplication(), uri)
+        } ?: return@launch
         tracks.add(0, t)
         setQueue(0)
         controller?.play()
@@ -121,9 +121,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun setQueue(startIndex: Int) {
         val c = controller ?: return
+        if (tracks.isEmpty()) { c.clearMediaItems(); currentIndex = -1; return }
         val items = tracks.map { track ->
-            val artwork = coverFile(track).takeIf { it.exists() }?.let { Uri.fromFile(it) }
-                ?: track.albumArtUri
+            val artwork = coverFile(track).takeIf { it.exists() }
+                ?.let { Uri.fromFile(it) } ?: track.albumArtUri
             MediaItem.Builder()
                 .setUri(track.uri)
                 .setMediaMetadata(
@@ -136,7 +137,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 .build()
         }
-        c.setMediaItems(items, startIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0)), 0L)
+        c.setMediaItems(items, startIndex.coerceIn(0, items.size - 1), 0L)
         c.prepare()
         currentIndex = startIndex
     }
@@ -149,15 +150,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun togglePlay() { controller?.let { if (it.isPlaying) it.pause() else it.play() } }
-    fun next() { controller?.let { it.seekToNextMediaItem(); it.play() } }
+    fun next()     { controller?.let { it.seekToNextMediaItem(); it.play() } }
     fun previous() { controller?.let { it.seekToPreviousMediaItem(); it.play() } }
     fun seekToFraction(f: Float) { controller?.let { it.seekTo((it.duration * f).toLong()) } }
 
     fun removeAt(index: Int) {
         val track = tracks.getOrNull(index) ?: return
-
         val hidden = hiddenIds()
-        hidden.add(track.id)
+        hidden.add(track.id)          // persists; survives restart
         saveHidden(hidden)
 
         val wasCurrent = index == currentIndex
@@ -168,7 +168,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             currentIndex = -1
         } else {
             val newIndex = if (wasCurrent) index.coerceAtMost(tracks.size - 1)
-                           else if (index < currentIndex) currentIndex - 1 else currentIndex
+                           else if (index < currentIndex) currentIndex - 1
+                           else currentIndex
             setQueue(newIndex)
             if (!wasCurrent && controller?.isPlaying == true) controller?.play()
         }
@@ -197,12 +198,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun coverFile(track: Track): File =
-        File(getApplication<Application>().filesDir, "covers/${track.stableKey.hashCode()}.img")
+        File(getApplication<Application>().filesDir,
+            "covers/${track.stableKey.hashCode()}.img")
 
     fun coverModel(track: Track, version: Int): Any {
         val f = coverFile(track)
-        return if (f.exists()) Uri.fromFile(f).buildUpon()
-            .appendQueryParameter("v", version.toString()).build()
+        return if (f.exists())
+            Uri.fromFile(f).buildUpon()
+                .appendQueryParameter("v", version.toString()).build()
         else track.albumArtUri
     }
 
@@ -212,14 +215,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             runCatching {
                 val f = coverFile(track)
                 f.parentFile?.mkdirs()
-                getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
-                    f.outputStream().use { input.copyTo(it) }
-                }
+                getApplication<Application>().contentResolver
+                    .openInputStream(uri)?.use { input ->
+                        f.outputStream().use { input.copyTo(it) }
+                    }
             }
             withContext(Dispatchers.Main) {
                 coverVersion++
                 val idx = currentIndex
-                if (idx >= 0) setQueue(idx)   // rebuild so notification artwork updates
+                if (idx >= 0) setQueue(idx)   // rebuild so notification art updates
                 controller?.play()
             }
         }

@@ -1,4 +1,3 @@
-// app/src/main/java/io/github/ronynn/rin/MediaLibrary.kt
 package io.github.ronynn.rin
 
 import android.content.ContentUris
@@ -8,6 +7,7 @@ import android.net.Uri
 import android.provider.MediaStore
 
 data class Track(
+    val id: Long,
     val uri: Uri,
     val title: String,
     val artist: String,
@@ -24,30 +24,37 @@ data class Track(
 
 object MediaLibrary {
     private val cols = arrayOf(
-        MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
-        MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM,
-        MediaStore.Audio.Media.ALBUM_ID, MediaStore.Audio.Media.DURATION,
+        MediaStore.Audio.Media._ID,
+        MediaStore.Audio.Media.TITLE,
+        MediaStore.Audio.Media.ARTIST,
+        MediaStore.Audio.Media.ALBUM,
+        MediaStore.Audio.Media.ALBUM_ID,
+        MediaStore.Audio.Media.DURATION,
         MediaStore.Audio.Media.DISPLAY_NAME
     )
 
     fun scan(context: Context): List<Track> {
         val out = ArrayList<Track>(256)
-        val sel = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > 5000"
+        val sel = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND " +
+                "${MediaStore.Audio.Media.DURATION} > 5000"
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cols, sel, null,
             "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE"
         )?.use { c ->
-            val iId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val iT = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val iA = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val iAl = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-            val iAlI = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-            val iD = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val iN = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            val iId   = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            val iT    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+            val iA    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val iAl   = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val iAlI  = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+            val iD    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val iN    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
             while (c.moveToNext()) {
                 val id = c.getLong(iId)
                 out += Track(
-                    uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id),
+                    id = id,
+                    uri = ContentUris.withAppendedId(
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
+                    ),
                     title = c.getString(iT) ?: c.getString(iN) ?: "Unknown",
                     artist = c.getString(iA) ?: "UNKNOWN ARTIST",
                     album = c.getString(iAl) ?: "UNKNOWN ALBUM",
@@ -66,12 +73,18 @@ object MediaLibrary {
             mmr.setDataSource(context, uri)
             val name = uri.lastPathSegment?.substringAfterLast('/') ?: "Unknown"
             Track(
+                id = -1L,
                 uri = uri,
-                title = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE) ?: name.substringBeforeLast('.'),
-                artist = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST) ?: "UNKNOWN ARTIST",
-                album = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM) ?: "UNKNOWN ALBUM",
+                title = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
+                    ?: name.substringBeforeLast('.'),
+                artist = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                    ?: "UNKNOWN ARTIST",
+                album = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
+                    ?: "UNKNOWN ALBUM",
                 albumId = 0L,
-                durationMs = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L,
+                durationMs = mmr.extractMetadata(
+                    MediaMetadataRetriever.METADATA_KEY_DURATION
+                )?.toLongOrNull() ?: 0L,
                 displayName = name
             )
         } catch (_: Exception) { null } finally { runCatching { mmr.release() } }

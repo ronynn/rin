@@ -10,8 +10,10 @@
 
     <application
         android:allowBackup="true"
-        android:label="Rin"
-        android:theme="@style/Theme.Rin">
+        android:theme="@style/Theme.Rin"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        tools:ignore="GoogleAppIndexingWarning">
 
         <activity
             android:name=".MainActivity"
@@ -49,5 +51,5 @@
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
-    </application>
+    </>
 </manifest>

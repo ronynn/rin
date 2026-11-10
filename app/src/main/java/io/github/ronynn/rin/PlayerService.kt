@@ -15,61 +15,49 @@ import androidx.media3.session.MediaSessionService
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.abs
 import kotlin.math.max
 
 class PlayerService : MediaSessionService() {
     private var session: MediaSession? = null
 
     companion object {
-        // This replaces the old Visualizer-based flow
         val waveform = MutableStateFlow(FloatArray(0))
     }
 
     override fun onCreate() {
         super.onCreate()
 
-        // 1. Create a TeeAudioProcessor that intercepts PCM data
         val teeProcessor = TeeAudioProcessor(object : TeeAudioProcessor.AudioBufferSink {
             override fun flush(sampleRateHz: Int, channelCount: Int, encoding: Int) {
-                // Called when the audio format changes (e.g., new track)
-                // We can reset the waveform buffer here if needed
+                // Format change — nothing to reset here
             }
 
             override fun handleBuffer(buffer: ByteBuffer) {
-                // This is the raw PCM data. We downsample it into a small FloatArray.
                 val pcmData = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
-                val sampleCount = pcmData.remaining() / 2 // 16-bit PCM -> 2 bytes per sample
-                if (sampleCount == 0) return
+                val sampleCount = pcmData.remaining() / 2
+                if (sampleCount <= 0) return
 
-                // We want ~1024 points for the visualizer, same as the JS fftSize
                 val targetSize = 1024
                 val step = max(1, sampleCount / targetSize)
                 val out = FloatArray(targetSize)
-
                 var i = 0
                 while (i < targetSize && pcmData.remaining() >= 2) {
-                    val sample = pcmData.short.toFloat() / 32768f // Normalize to -1..1
-                    out[i] = sample
-                    // Skip ahead to downsample
-                    val skip = (step - 1) * 2
-                    if (pcmData.remaining() > skip) pcmData.position(pcmData.position() + skip)
+                    out[i] = pcmData.short.toFloat() / 32768f
                     i++
+                    val toSkip = (step - 1) * 2
+                    if (pcmData.remaining() < toSkip) break
+                    pcmData.position(pcmData.position() + toSkip)
                 }
-
-                // Publish the waveform (trim to actual filled size if buffer was short)
-                waveform.value = if (i < targetSize) out.copyOf(i) else out
+                waveform.value = if (i == targetSize) out else out.copyOf(i)
             }
         })
 
-        // 2. Build a RenderersFactory that injects our TeeAudioProcessor
         val renderersFactory = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
                 context: Context,
                 enableFloatOutput: Boolean,
-                enableAudioTrackPlaybackParams: Boolean,
-                enableOffload: Boolean
-            ): AudioSink {
+                enableAudioTrackPlaybackParams: Boolean
+            ): AudioSink? {
                 return DefaultAudioSink.Builder(context)
                     .setAudioProcessors(arrayOf(teeProcessor))
                     .setEnableFloatOutput(enableFloatOutput)

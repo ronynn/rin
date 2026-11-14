@@ -1,10 +1,13 @@
 package io.github.ronynn.rin
 
+import android.graphics.Typeface
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -14,11 +17,15 @@ data class RadialBlob(val color: Color, val cx: Float, val cy: Float, val r: Flo
 data class RinColors(
     val bg: Color, val fg: Color, val accent: Color, val dim: Color,
     val panel: Color, val listHover: Color, val border: Color,
-    val isLight: Boolean = false, val isGlass: Boolean = false,
-    val blobs: List<RadialBlob> = emptyList()
+    val isLight: Boolean = false
 )
 
 data class RinFont(val family: FontFamily, val weight: FontWeight)
+
+@OptIn(ExperimentalTextApi::class)
+private val CondensedFamily: FontFamily = runCatching {
+    FontFamily(Typeface.create("sans-serif-condensed", Typeface.NORMAL))
+}.getOrDefault(FontFamily.SansSerif)
 
 val Themes: List<Pair<String, RinColors>> = listOf(
     "default" to RinColors(Color(0xFF111111), Color(0xFFFFFFFF), Color(0xFF888888), Color(0xFF555555), Color(0xFF111111), Color(0xFF333333), Color(0xFFFFFFFF)),
@@ -34,48 +41,14 @@ val Themes: List<Pair<String, RinColors>> = listOf(
     "crt-amber" to RinColors(Color(0xFF1A1000), Color(0xFFFFB000), Color(0xFFFFCC33), Color(0xFF806000), Color(0xFF100A00), Color(0xFF2A1C00), Color(0xFFFFB000)),
     "forest" to RinColors(Color(0xFF1E2A1E), Color(0xFFD4E7C5), Color(0xFFA8C98C), Color(0xFF6D8A6D), Color(0xFF162016), Color(0xFF2A3A2A), Color(0xFFD4E7C5)),
     "ev-light" to RinColors(Color(0xFFFDF6E3), Color(0xFF5C6A72), Color(0xFF8DA101), Color(0xFF939F91), Color(0xFFF4F0D9), Color(0xFFE6E2CC), Color(0xFF5C6A72), isLight = true),
-    "chrome" to RinColors(Color(0xFF2A2A2A), Color(0xFFE0E0E0), Color(0xFFFF6600), Color(0xFF666666), Color(0xFF333333), Color(0xFF444444), Color(0xFF555555)),
-    "glass-light" to RinColors(
-        bg = Color(0xFFE8DFFF), fg = Color(0xFF1A1A2E),
-        accent = Color(0xFFD946EF), dim = Color(0xFF55557A),
-        panel = Color(0x80FFFFFF), listHover = Color(0x66FFFFFF),
-        border = Color(0xCCFFFFFF), isLight = true, isGlass = true,
-        blobs = listOf(
-            RadialBlob(Color(0xE6FF6B9D), 0.12f, 0.12f, 1.30f),
-            RadialBlob(Color(0xD960A5FA), 0.88f, 0.22f, 1.25f),
-            RadialBlob(Color(0xD9FBBF24), 0.50f, 0.95f, 1.25f)
-        )
-    ),
-    "glass-moss" to RinColors(
-        bg = Color(0xFFE0F2E0), fg = Color(0xFF1A2E1A),
-        accent = Color(0xFF4CAF50), dim = Color(0xFF557A55),
-        panel = Color(0x80FFFFFF), listHover = Color(0x66FFFFFF),
-        border = Color(0xCCFFFFFF), isLight = true, isGlass = true,
-        blobs = listOf(
-            RadialBlob(Color(0xD94CAF50), 0.12f, 0.12f, 1.30f),
-            RadialBlob(Color(0xD92E7D32), 0.88f, 0.22f, 1.25f),
-            RadialBlob(Color(0xD9AED581), 0.50f, 0.95f, 1.25f)
-        )
-    ),
-    "glass-sunset" to RinColors(
-        bg = Color(0xFFFFE0D0), fg = Color(0xFF2E1A1A),
-        accent = Color(0xFFFF6B6B), dim = Color(0xFF7A5555),
-        panel = Color(0x80FFFFFF), listHover = Color(0x66FFFFFF),
-        border = Color(0xCCFFFFFF), isLight = true, isGlass = true,
-        blobs = listOf(
-            RadialBlob(Color(0xE6FF6B6B), 0.12f, 0.12f, 1.30f),
-            RadialBlob(Color(0xD9FFB74D), 0.88f, 0.22f, 1.25f),
-            RadialBlob(Color(0xD9EF5350), 0.50f, 0.95f, 1.25f)
-        )
-    )
+    "chrome" to RinColors(Color(0xFF2A2A2A), Color(0xFFE0E0E0), Color(0xFFFF6600), Color(0xFF666666), Color(0xFF333333), Color(0xFF444444), Color(0xFF555555))
 )
 
 val Fonts: List<Pair<String, RinFont>> = listOf(
     "sans" to RinFont(FontFamily.SansSerif, FontWeight.Normal),
-    "light" to RinFont(FontFamily.SansSerif, FontWeight.Light),
     "serif" to RinFont(FontFamily.Serif, FontWeight.Normal),
     "mono" to RinFont(FontFamily.Monospace, FontWeight.Normal),
-    "cursive" to RinFont(FontFamily.Cursive, FontWeight.Normal)
+    "condensed" to RinFont(CondensedFamily, FontWeight.Normal)
 )
 
 val LocalRinColors = staticCompositionLocalOf { Themes[0].second }
@@ -96,6 +69,7 @@ fun RinTheme(
     CompositionLocalProvider(
         LocalRinColors provides colors,
         LocalRinFont provides font,
+        LocalContentColor provides colors.fg,
         LocalTextStyle provides TextStyle(
             fontFamily = font.family,
             fontWeight = font.weight,

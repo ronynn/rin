@@ -10,11 +10,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Text
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -37,12 +36,25 @@ internal fun SettingsPanel(vm: PlayerViewModel, onOpenFile: () -> Unit) {
                 RinButton(Themes[vm.themeIndex].first.uppercase(), Modifier.fillMaxWidth()) {
                     themeMenu = true
                 }
-                DropdownMenu(expanded = themeMenu, onDismissRequest = { themeMenu = false }) {
-                    Themes.forEachIndexed { i, (name, _) ->
-                        DropdownMenuItem(
-                            text = { RinText(name.uppercase(), fontSize = 12.sp) },
-                            onClick = { vm.applyTheme(i); themeMenu = false }
-                        )
+                CompositionLocalProvider(LocalContentColor provides c.fg) {
+                    DropdownMenu(
+                        expanded = themeMenu,
+                        onDismissRequest = { themeMenu = false },
+                        modifier = Modifier.background(c.panel)
+                    ) {
+                        Themes.forEachIndexed { i, (name, _) ->
+                            DropdownMenuItem(
+                                text = {
+                                    RinText(
+                                        name.uppercase(),
+                                        color = if (i == vm.themeIndex) c.accent else c.fg,
+                                        fontSize = 12.sp
+                                    )
+                                },
+                                onClick = { vm.applyTheme(i); themeMenu = false },
+                                modifier = Modifier.background(c.panel)
+                            )
+                        }
                     }
                 }
             }
@@ -51,12 +63,25 @@ internal fun SettingsPanel(vm: PlayerViewModel, onOpenFile: () -> Unit) {
                 RinButton(Fonts[vm.fontIndex].first.uppercase(), Modifier.fillMaxWidth()) {
                     fontMenu = true
                 }
-                DropdownMenu(expanded = fontMenu, onDismissRequest = { fontMenu = false }) {
-                    Fonts.forEachIndexed { i, (name, _) ->
-                        DropdownMenuItem(
-                            text = { RinText(name.uppercase(), fontSize = 12.sp) },
-                            onClick = { vm.applyFont(i); fontMenu = false }
-                        )
+                CompositionLocalProvider(LocalContentColor provides c.fg) {
+                    DropdownMenu(
+                        expanded = fontMenu,
+                        onDismissRequest = { fontMenu = false },
+                        modifier = Modifier.background(c.panel)
+                    ) {
+                        Fonts.forEachIndexed { i, (name, _) ->
+                            DropdownMenuItem(
+                                text = {
+                                    RinText(
+                                        name.uppercase(),
+                                        color = if (i == vm.fontIndex) c.accent else c.fg,
+                                        fontSize = 12.sp
+                                    )
+                                },
+                                onClick = { vm.applyFont(i); fontMenu = false },
+                                modifier = Modifier.background(c.panel)
+                            )
+                        }
                     }
                 }
             }
@@ -211,7 +236,10 @@ internal fun PlaylistPanel(vm: PlayerViewModel, modifier: Modifier = Modifier) {
 @Composable
 private fun PlaylistContent(vm: PlayerViewModel, modifier: Modifier) {
     val c = LocalRinColors.current
-    if (!vm.hasScanned || vm.isScanning) { Box(modifier.fillMaxSize()); return }
+    if (!vm.hasScanned || vm.isScanning) {
+        Box(modifier.fillMaxSize())
+        return
+    }
     if (vm.tracks.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             RinText("NO MUSIC FOUND", color = c.accent, fontSize = 11.sp)

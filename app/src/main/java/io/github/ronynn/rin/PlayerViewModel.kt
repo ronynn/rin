@@ -58,6 +58,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     var editingTrack by mutableStateOf<Track?>(null)
 
+    private var cachedTrack by mutableStateOf<Track?>(null)
     private var pendingRestore: Pair<Int, Long>? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
@@ -71,9 +72,28 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         favorites = prefs.getStringSet("favorites", emptySet())!!.toSet()
         openFolders = prefs.getStringSet("openFolders", emptySet())!!.toSet()
         historyIds = prefs.getString("history", "")?.split("\n")?.filter { it.isNotEmpty() } ?: emptyList()
+
+        // Restore cached track for seamless display before scan completes
+        val cachedUriStr = prefs.getString("lastTrackUri", null)
+        if (cachedUriStr != null) {
+            val track = Track(
+                id = prefs.getLong("lastTrackId", -1L),
+                uri = Uri.parse(cachedUriStr),
+                title = prefs.getString("lastTrackTitle", "") ?: "",
+                artist = prefs.getString("lastTrackArtist", "") ?: "",
+                album = prefs.getString("lastTrackAlbum", "") ?: "",
+                folder = prefs.getString("lastTrackFolder", "") ?: "",
+                durationMs = prefs.getLong("lastTrackDuration", 0L),
+                displayName = prefs.getString("lastTrackName", "") ?: ""
+            )
+            cachedTrack = track
+            if (track.folder.isNotBlank() && track.folder !in openFolders) {
+                openFolders = openFolders + track.folder
+            }
+        }
     }
 
-    val currentTrack: Track? get() = tracks.getOrNull(currentIndex)
+    val currentTrack: Track? get() = cachedTrack ?: tracks.getOrNull(currentIndex)
 
     val groupedTracks by derivedStateOf {
         val map = sortedMapOf<String, MutableList<Track>>(compareBy { it.lowercase() })
@@ -122,7 +142,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 })
                 startTicker()
-                // If scan already completed before we connected, restore now
                 pendingRestore?.let { (idx, pos) ->
                     setQueue(idx, pos)
                     pendingRestore = null
@@ -137,19 +156,25 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         status = "SCANNING…"
         val found = withContext(Dispatchers.IO) { MediaLibrary.scan(getApplication()) }
         val overridden = found.map { applyMetadataOverride(it) }
+        val cachedKey = cachedTrack?.uniqueKey
         Snapshot.withMutableSnapshot {
             tracks.clear()
             tracks.addAll(overridden)
         }
         status = if (overridden.isEmpty()) "NO MUSIC FOUND" else ""
-        if (overridden.isNotEmpty() && currentIndex < 0) {
-            val lastIndex = prefs.getInt("lastIndex", 0).coerceIn(0, overridden.size - 1)
+
+        if (overridden.isNotEmpty()) {
+            val restoreIdx = when {
+                cachedKey != null -> tracks.indexOfFirst { it.uniqueKey == cachedKey }
+                else -> prefs.getInt("lastIndex", 0)
+            }.let { if (it < 0) 0 else it.coerceAtMost(tracks.size - 1) }
             val lastPos = prefs.getLong("lastPos", 0L)
-            openFolders = openFolders + overridden[lastIndex].folder
+            openFolders = openFolders + tracks[restoreIdx].folder
             saveOpenFolders()
-            if (controller != null) setQueue(lastIndex, lastPos)
-            else { currentIndex = lastIndex; pendingRestore = lastIndex to lastPos }
+            if (controller != null) setQueue(restoreIdx, lastPos)
+            else { currentIndex = restoreIdx; pendingRestore = restoreIdx to lastPos }
         }
+        cachedTrack = null
         isScanning = false
         hasScanned = true
     }
@@ -184,10 +209,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             currentIndex = -1
             return
         }
-        currentIndex = startIndex  // set UI state immediately
+        cachedTrack = null
+        currentIndex = startIndex
+        tracks.getOrNull(startIndex)?.let { saveTrackInfo(it) }
         val c = controller ?: return
         val items = tracks.map { track ->
-            val artworkUri = coverFile(track).takeIf { it.exists() }?.let { Uri.fromFile(it) }
+            val customCover = coverFile(track).takeIf { it.exists() }?.let { Uri.fromFile(it) }
+            val artworkUri = customCover ?: track.uri
             MediaItem.Builder()
                 .setUri(track.uri)
                 .setMediaMetadata(
@@ -202,6 +230,19 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
         c.setMediaItems(items, startIndex.coerceIn(0, items.size - 1), startPos)
         c.prepare()
+    }
+
+    private fun saveTrackInfo(track: Track) {
+        prefs.edit()
+            .putLong("lastTrackId", track.id)
+            .putString("lastTrackUri", track.uri.toString())
+            .putString("lastTrackTitle", track.title)
+            .putString("lastTrackArtist", track.artist)
+            .putString("lastTrackAlbum", track.album)
+            .putString("lastTrackFolder", track.folder)
+            .putLong("lastTrackDuration", track.durationMs)
+            .putString("lastTrackName", track.displayName)
+            .apply()
     }
 
     fun playTrack(track: Track) {

@@ -1,5 +1,6 @@
 package io.github.ronynn.rin
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
@@ -16,17 +17,16 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -45,7 +45,11 @@ private object BitmapCache {
     fun put(k: String, b: Bitmap) { if (map.size > 20) map.clear(); map[k] = b }
 }
 
-/** Text that always inherits the current font family and weight from LocalRinFont. */
+/**
+ * Text that always inherits font family + weight from LocalRinFont and
+ * falls back to the nearest LocalContentColor (so button text is readable
+ * when selected, unlike the previous version which always used c.fg).
+ */
 @Composable
 internal fun RinText(
     text: String,
@@ -59,11 +63,11 @@ internal fun RinText(
     lineHeight: TextUnit = TextUnit.Unspecified
 ) {
     val font = LocalRinFont.current
-    val c = LocalRinColors.current
+    val resolvedColor = if (color == Color.Unspecified) LocalContentColor.current else color
     Text(
         text = text,
         modifier = modifier,
-        color = if (color == Color.Unspecified) c.fg else color,
+        color = resolvedColor,
         fontSize = if (fontSize == TextUnit.Unspecified) 12.sp else fontSize,
         fontWeight = fontWeight ?: font.weight,
         fontFamily = font.family,
@@ -88,7 +92,7 @@ internal fun RinImage(model: Any?, modifier: Modifier = Modifier) {
     bmp?.let { Image(it.asImageBitmap(), null, modifier, contentScale = ContentScale.Crop) }
 }
 
-private fun loadBitmap(context: android.content.Context, uri: Uri): Bitmap? {
+private fun loadBitmap(context: Context, uri: Uri): Bitmap? {
     return try {
         if (uri.scheme == "file") {
             BitmapFactory.decodeFile(uri.path)
@@ -102,7 +106,7 @@ private fun loadBitmap(context: android.content.Context, uri: Uri): Bitmap? {
     } catch (_: Exception) { null }
 }
 
-private fun fromMmr(context: android.content.Context, uri: Uri): Bitmap? {
+private fun fromMmr(context: Context, uri: Uri): Bitmap? {
     val mmr = MediaMetadataRetriever()
     return try {
         mmr.setDataSource(context, uri)
@@ -119,31 +123,25 @@ internal fun Fieldset(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val c = LocalRinColors.current
-    val shape: Shape = if (c.isGlass) RoundedCornerShape(12.dp) else RectangleShape
-    val borderWidth = if (c.isGlass) 1.dp else 2.dp
-
     Box(modifier) {
         Column(
             Modifier.fillMaxWidth()
                 .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier)
-                .padding(top = if (c.isGlass) 9.dp else 7.dp)
-                .then(if (c.isGlass) Modifier.shadow(6.dp, shape, clip = false) else Modifier)
-                .border(borderWidth, c.border, shape)
-                .background(c.panel, shape)
+                .padding(top = 7.dp)
+                .border(2.dp, c.border)
+                .background(c.panel)
                 .padding(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
             content = content
         )
-        if (!c.isGlass) {
-            RinText(
-                legend.uppercase(),
-                Modifier.padding(start = 14.dp).background(c.panel).padding(horizontal = 6.dp),
-                color = c.accent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
-        }
+        RinText(
+            legend.uppercase(),
+            Modifier.padding(start = 14.dp).background(c.panel).padding(horizontal = 6.dp),
+            color = c.accent,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
     }
 }
 
@@ -155,24 +153,16 @@ internal fun RinButton(
     onClick: () -> Unit
 ) {
     val c = LocalRinColors.current
-    val shape: Shape = if (c.isGlass) RoundedCornerShape(8.dp) else RectangleShape
     OutlinedButton(
         onClick = onClick,
         modifier = modifier.height(34.dp),
-        border = if (c.isGlass) null else BorderStroke(2.dp, c.border),
-        shape = shape,
+        border = BorderStroke(2.dp, c.border),
+        shape = RectangleShape,
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = when {
-                selected -> c.fg
-                c.isGlass -> Color.White.copy(alpha = 0.55f)
-                else -> Color.Transparent
-            },
+            containerColor = if (selected) c.fg else Color.Transparent,
             contentColor = if (selected) c.bg else c.fg
         ),
-        contentPadding = PaddingValues(0.dp),
-        elevation = if (c.isGlass)
-            ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
-        else null
+        contentPadding = PaddingValues(0.dp)
     ) {
         RinText(text, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
@@ -214,27 +204,17 @@ internal fun TransportButton(label: String, onClick: () -> Unit) {
 @Composable
 internal fun ProgressBar(progress: Float, modifier: Modifier, onSeek: (Float) -> Unit) {
     val c = LocalRinColors.current
-    val shape: Shape = if (c.isGlass) RoundedCornerShape(4.dp) else RectangleShape
     Canvas(
         modifier.height(12.dp)
-            .border(if (c.isGlass) 1.dp else 2.dp, c.border, shape)
-            .background(c.bg, shape)
+            .border(2.dp, c.border)
+            .background(c.bg)
             .pointerInput(Unit) {
                 detectTapGestures { onSeek((it.x / size.width).coerceIn(0f, 1f)) }
             }
     ) {
         val fillWidth = size.width * progress
         if (fillWidth > 0f) {
-            if (c.isGlass) {
-                drawRect(
-                    brush = Brush.horizontalGradient(
-                        listOf(c.accent, c.accent.copy(alpha = 0.75f))
-                    ),
-                    size = Size(fillWidth, size.height)
-                )
-            } else {
-                drawRect(c.accent, size = Size(fillWidth, size.height))
-            }
+            drawRect(c.accent, size = Size(fillWidth, size.height))
         }
     }
 }

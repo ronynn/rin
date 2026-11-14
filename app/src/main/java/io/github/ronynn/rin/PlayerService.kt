@@ -98,7 +98,6 @@ class PlayerService : MediaSessionService() {
             }
         })
 
-        // Tap the notification → open the app
         val launchIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -109,6 +108,7 @@ class PlayerService : MediaSessionService() {
 
         session = MediaSession.Builder(this, player)
             .setSessionActivity(sessionActivity)
+            .setBitmapLoader(TrackArtworkLoader(this))
             .build()
     }
 

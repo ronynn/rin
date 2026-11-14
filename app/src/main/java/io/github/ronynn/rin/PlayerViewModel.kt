@@ -11,7 +11,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
-import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -75,7 +74,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     val currentTrack: Track? get() = tracks.getOrNull(currentIndex)
 
-    // Derived state — recomputed only when inputs change
     val groupedTracks by derivedStateOf {
         val map = sortedMapOf<String, MutableList<Track>>(compareBy { it.lowercase() })
         tracks.forEach { map.getOrPut(it.folder) { mutableListOf() }.add(it) }
@@ -182,7 +180,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val c = controller ?: return
         if (tracks.isEmpty()) { c.clearMediaItems(); currentIndex = -1; return }
         val items = tracks.map { track ->
-            // Only use albumArtUri when it points to a real MediaStore id
             val customCover = coverFile(track).takeIf { it.exists() }?.let { Uri.fromFile(it) }
             val artworkUri = customCover ?: track.albumArtUri.takeIf { track.id > 0 }
             MediaItem.Builder()
@@ -244,8 +241,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun isFavorite(track: Track): Boolean = track.uniqueKey in favorites
 
-    fun setViewTab(tab: String) { viewTab = tab; searchQuery = ""; isSearchOpen = false }
-    fun setSearch(q: String) { searchQuery = q }
+    fun selectView(tab: String) {
+        viewTab = tab
+        searchQuery = ""
+        isSearchOpen = false
+    }
+
+    fun updateSearch(q: String) { searchQuery = q }
 
     fun toggleSearch() {
         isSearchOpen = !isSearchOpen
@@ -267,11 +269,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString("history", updated.joinToString("\n")).apply()
     }
 
-    fun setTheme(i: Int) { themeIndex = i; prefs.edit().putInt("theme", i).apply() }
-    fun setFont(i: Int) { fontIndex = i; prefs.edit().putInt("font", i).apply() }
+    fun applyTheme(i: Int) {
+        themeIndex = i
+        prefs.edit().putInt("theme", i).apply()
+    }
 
-    fun setDynamicColors(colors: RinColors) {
-        dynamicColors = colors
+    fun applyFont(i: Int) {
+        fontIndex = i
+        prefs.edit().putInt("font", i).apply()
     }
 
     fun startEditing(track: Track) { editingTrack = track }

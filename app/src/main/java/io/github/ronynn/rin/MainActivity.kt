@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
             if (extracted != null) {
                 val rin = DynamicTheme.toRinColors(extracted)
                 dynamicRin = rin
-                vm.setDynamicColors(rin)
+                vm.dynamicColors = rin
                 android.util.Log.d("RinDynamic", "Theme source: ${extracted.source}")
             } else if (!prefs.getBoolean("dynamic_warned", false)) {
                 prefs.edit().putBoolean("dynamic_warned", true).apply()

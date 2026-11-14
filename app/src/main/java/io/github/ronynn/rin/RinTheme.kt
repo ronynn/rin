@@ -88,8 +88,8 @@ fun RinTheme(
     dynamicColors: RinColors? = null,
     content: @Composable () -> Unit
 ) {
-    val colors = when {
-        themeIndex == 7 && dynamicColors != null -> dynamicColors
+    val colors: RinColors = when {
+        themeIndex == 7 -> dynamicColors ?: Themes[7].second
         else -> Themes.getOrNull(themeIndex)?.second ?: Themes[0].second
     }
     val font = Fonts.getOrNull(fontIndex)?.second ?: Fonts[0].second

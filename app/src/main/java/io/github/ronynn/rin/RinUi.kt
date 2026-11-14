@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RectangleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.ButtonDefaults
@@ -35,6 +34,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -81,7 +81,8 @@ fun Fieldset(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val c = LocalRinColors.current
-    val shape = if (c.isGlass) RoundedCornerShape(12.dp) else RectangleShape
+    val shape: androidx.compose.ui.graphics.Shape =
+        if (c.isGlass) RoundedCornerShape(12.dp) else RectangleShape
     val borderWidth = if (c.isGlass) 1.dp else 2.dp
 
     Box(modifier) {
@@ -119,7 +120,8 @@ fun RinButton(
     onClick: () -> Unit
 ) {
     val c = LocalRinColors.current
-    val shape = if (c.isGlass) RoundedCornerShape(8.dp) else RectangleShape
+    val shape: androidx.compose.ui.graphics.Shape =
+        if (c.isGlass) RoundedCornerShape(8.dp) else RectangleShape
     OutlinedButton(
         onClick = onClick,
         modifier = modifier.height(34.dp),
@@ -378,7 +380,8 @@ private fun TransportButton(label: String, onClick: () -> Unit) {
 @Composable
 private fun ProgressBar(progress: Float, modifier: Modifier, onSeek: (Float) -> Unit) {
     val c = LocalRinColors.current
-    val shape = if (c.isGlass) RoundedCornerShape(4.dp) else RectangleShape
+    val shape: androidx.compose.ui.graphics.Shape =
+        if (c.isGlass) RoundedCornerShape(4.dp) else RectangleShape
     Canvas(
         modifier.height(12.dp)
             .border(if (c.isGlass) 1.dp else 2.dp, c.border, shape)
@@ -576,9 +579,10 @@ private fun EditMetadataDialog(
     onCancel: () -> Unit
 ) {
     val c = LocalRinColors.current
-    var title by remember { mutableStateOf(track.title) }
-    var artist by remember { mutableStateOf(track.artist) }
-    var album by remember { mutableStateOf(track.album) }
+    // Key on uniqueKey so opening for a different track rebuilds the fields
+    var title by remember(track.uniqueKey) { mutableStateOf(track.title) }
+    var artist by remember(track.uniqueKey) { mutableStateOf(track.artist) }
+    var album by remember(track.uniqueKey) { mutableStateOf(track.album) }
 
     Dialog(onDismissRequest = onCancel) {
         Column(

@@ -33,15 +33,13 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("rin", 0)
         val themeIdx = prefs.getInt("theme", 0)
 
-        // Resolve the dynamic theme first so both the window background and Compose
-        // start from the same colours — zero flash regardless of whether dynamic
-        // extraction succeeds.
         var dynamicRin: RinColors? = null
         if (themeIdx == 7) {
             val extracted = DynamicTheme.extract(this)
             if (extracted != null) {
-                dynamicRin = DynamicTheme.toRinColors(extracted)
-                vm.setDynamicColors(dynamicRin)
+                val rin = DynamicTheme.toRinColors(extracted)
+                dynamicRin = rin
+                vm.setDynamicColors(rin)
                 android.util.Log.d("RinDynamic", "Theme source: ${extracted.source}")
             } else if (!prefs.getBoolean("dynamic_warned", false)) {
                 prefs.edit().putBoolean("dynamic_warned", true).apply()
@@ -49,7 +47,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        val colors = when {
+        val colors: RinColors = when {
             themeIdx == 7 && dynamicRin != null -> dynamicRin
             else -> Themes.getOrNull(themeIdx)?.second ?: Themes[0].second
         }

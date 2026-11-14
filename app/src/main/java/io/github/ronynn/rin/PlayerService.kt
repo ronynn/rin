@@ -19,6 +19,7 @@ import kotlin.math.max
 
 class PlayerService : MediaSessionService() {
     private var session: MediaSession? = null
+    private var prevWave: FloatArray? = null
 
     companion object {
         val waveform = MutableStateFlow(FloatArray(0))
@@ -29,7 +30,7 @@ class PlayerService : MediaSessionService() {
 
         val teeProcessor = TeeAudioProcessor(object : TeeAudioProcessor.AudioBufferSink {
             override fun flush(sampleRateHz: Int, channelCount: Int, encoding: Int) {
-                // Format change — nothing to reset here
+                prevWave = null
             }
 
             override fun handleBuffer(buffer: ByteBuffer) {
@@ -48,7 +49,15 @@ class PlayerService : MediaSessionService() {
                     if (pcmData.remaining() < toSkip) break
                     pcmData.position(pcmData.position() + toSkip)
                 }
-                waveform.value = if (i == targetSize) out else out.copyOf(i)
+                val trimmed = if (i == targetSize) out else out.copyOf(i)
+
+                // Exponential smoothing — matches AnalyserNode's smoothingTimeConstant = 0.85
+                val smoothed = prevWave?.takeIf { it.size == trimmed.size }?.let { p ->
+                    FloatArray(trimmed.size) { idx -> p[idx] * 0.85f + trimmed[idx] * 0.15f }
+                } ?: trimmed
+
+                prevWave = smoothed
+                waveform.value = smoothed
             }
         })
 
@@ -78,10 +87,14 @@ class PlayerService : MediaSessionService() {
 
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (!isPlaying) waveform.value = FloatArray(0)
+                if (!isPlaying) {
+                    prevWave = null
+                    waveform.value = FloatArray(0)
+                }
             }
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_IDLE || state == Player.STATE_ENDED) {
+                    prevWave = null
                     waveform.value = FloatArray(0)
                 }
             }
@@ -101,6 +114,7 @@ class PlayerService : MediaSessionService() {
     override fun onDestroy() {
         session?.run { player.release(); release() }
         session = null
+        prevWave = null
         waveform.value = FloatArray(0)
         super.onDestroy()
     }

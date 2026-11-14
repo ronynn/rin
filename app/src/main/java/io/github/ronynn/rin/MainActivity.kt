@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -15,9 +18,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import androidx.compose.ui.graphics.toArgb
+import androidx.core.view.WindowCompat
 
 class MainActivity : ComponentActivity() {
     private val vm: PlayerViewModel by viewModels()
@@ -25,16 +30,44 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Match window background to stored theme so no black flash before Compose draws
         val prefs = getSharedPreferences("rin", 0)
         val themeIdx = prefs.getInt("theme", 0)
-        val colors = Themes.getOrNull(themeIdx)?.second ?: Themes[0].second
-        window.setBackgroundDrawable(ColorDrawable(colors.bg.toArgb()))
+
+        // Resolve the dynamic theme first so both the window background and Compose
+        // start from the same colours — zero flash regardless of whether dynamic
+        // extraction succeeds.
+        var dynamicRin: RinColors? = null
+        if (themeIdx == 7) {
+            val extracted = DynamicTheme.extract(this)
+            if (extracted != null) {
+                dynamicRin = DynamicTheme.toRinColors(extracted)
+                vm.setDynamicColors(dynamicRin)
+                android.util.Log.d("RinDynamic", "Theme source: ${extracted.source}")
+            } else if (!prefs.getBoolean("dynamic_warned", false)) {
+                prefs.edit().putBoolean("dynamic_warned", true).apply()
+                android.util.Log.w("RinDynamic", "Wallpaper theme unavailable — static preset used")
+            }
+        }
+
+        val colors = when {
+            themeIdx == 7 && dynamicRin != null -> dynamicRin
+            else -> Themes.getOrNull(themeIdx)?.second ?: Themes[0].second
+        }
+        window.setBackgroundDrawable(buildWindowBackground(colors))
 
         enableEdgeToEdge()
 
         setContent {
             val context = LocalContext.current
+            val currentColors = LocalRinColors.current
+
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = currentColors.isLight
+                    isAppearanceLightNavigationBars = currentColors.isLight
+                }
+            }
+
             val permLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestMultiplePermissions()
             ) { result ->
@@ -49,18 +82,17 @@ class MainActivity : ComponentActivity() {
                     Manifest.permission.READ_MEDIA_AUDIO
                 else Manifest.permission.READ_EXTERNAL_STORAGE
 
-                val needed = mutableListOf(mediaPerm, Manifest.permission.RECORD_AUDIO)
+                val needed = mutableListOf(mediaPerm)
                 if (Build.VERSION.SDK_INT >= 33)
                     needed += Manifest.permission.POST_NOTIFICATIONS
 
                 val missing = needed.filter {
                     ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
                 }
-                if (missing.isEmpty()) vm.scanDevice()
-                else permLauncher.launch(missing.toTypedArray())
+                if (missing.isEmpty()) vm.scanDevice() else permLauncher.launch(missing.toTypedArray())
             }
 
-            RinTheme(vm.themeIndex) {
+            RinTheme(vm.themeIndex, vm.fontIndex, vm.dynamicColors) {
                 PlayerScreen(vm)
             }
         }
@@ -87,5 +119,24 @@ class MainActivity : ComponentActivity() {
         else
             intent.getParcelableExtra<Parcelable>(Intent.EXTRA_STREAM) as? Uri
         else -> null
+    }
+
+    private fun buildWindowBackground(colors: RinColors): Drawable {
+        if (!colors.isGlass || colors.blobs.isEmpty()) {
+            return ColorDrawable(colors.bg.toArgb())
+        }
+        val minDim = minOf(resources.displayMetrics.widthPixels,
+                          resources.displayMetrics.heightPixels).toFloat()
+        val layers = mutableListOf<Drawable>()
+        layers.add(ColorDrawable(colors.bg.toArgb()))
+        colors.blobs.forEach { blob ->
+            val g = GradientDrawable()
+            g.gradientType = GradientDrawable.RADIAL_GRADIENT
+            g.colors = intArrayOf(blob.color.toArgb(), 0)
+            g.setGradientCenter(blob.cx, blob.cy)
+            g.gradientRadius = blob.r * minDim
+            layers.add(g)
+        }
+        return LayerDrawable(layers.toTypedArray())
     }
 }

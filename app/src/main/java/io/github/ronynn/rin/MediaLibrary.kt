@@ -12,14 +12,15 @@ data class Track(
     val title: String,
     val artist: String,
     val album: String,
-    val albumId: Long,
+    val folder: String,
     val durationMs: Long,
     val displayName: String
 ) {
     val albumArtUri: Uri = ContentUris.withAppendedId(
-        Uri.parse("content://media/external/audio/albumart"), albumId
+        Uri.parse("content://media/external/audio/albumart"),
+        id.takeIf { it > 0 } ?: 0L
     )
-    val stableKey: String get() = "$title|$artist|$album|$durationMs"
+    val uniqueKey: String get() = if (id > 0) "m$id" else "u:$uri"
 }
 
 object MediaLibrary {
@@ -28,28 +29,29 @@ object MediaLibrary {
         MediaStore.Audio.Media.TITLE,
         MediaStore.Audio.Media.ARTIST,
         MediaStore.Audio.Media.ALBUM,
-        MediaStore.Audio.Media.ALBUM_ID,
         MediaStore.Audio.Media.DURATION,
-        MediaStore.Audio.Media.DISPLAY_NAME
+        MediaStore.Audio.Media.DISPLAY_NAME,
+        MediaStore.Audio.Media.DATA
     )
 
     fun scan(context: Context): List<Track> {
-        val out = ArrayList<Track>(256)
+        val out = ArrayList<Track>(512)
         val sel = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND " +
                 "${MediaStore.Audio.Media.DURATION} > 5000"
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cols, sel, null,
             "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE"
         )?.use { c ->
-            val iId   = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val iT    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val iA    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val iAl   = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-            val iAlI  = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-            val iD    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val iN    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            val iId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            val iT = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+            val iA = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val iAl = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val iD = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val iN = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            val iP = c.getColumnIndex(MediaStore.Audio.Media.DATA)
             while (c.moveToNext()) {
                 val id = c.getLong(iId)
+                val path = if (iP >= 0) c.getString(iP) else null
                 out += Track(
                     id = id,
                     uri = ContentUris.withAppendedId(
@@ -58,7 +60,7 @@ object MediaLibrary {
                     title = c.getString(iT) ?: c.getString(iN) ?: "Unknown",
                     artist = c.getString(iA) ?: "UNKNOWN ARTIST",
                     album = c.getString(iAl) ?: "UNKNOWN ALBUM",
-                    albumId = c.getLong(iAlI),
+                    folder = folderFromPath(path),
                     durationMs = c.getLong(iD),
                     displayName = c.getString(iN) ?: ""
                 )
@@ -81,12 +83,18 @@ object MediaLibrary {
                     ?: "UNKNOWN ARTIST",
                 album = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
                     ?: "UNKNOWN ALBUM",
-                albumId = 0L,
+                folder = "IMPORTED",
                 durationMs = mmr.extractMetadata(
                     MediaMetadataRetriever.METADATA_KEY_DURATION
                 )?.toLongOrNull() ?: 0L,
                 displayName = name
             )
         } catch (_: Exception) { null } finally { runCatching { mmr.release() } }
+    }
+
+    private fun folderFromPath(path: String?): String {
+        if (path.isNullOrBlank()) return "Unknown"
+        val parent = path.substringBeforeLast('/', "")
+        return parent.substringAfterLast('/').ifBlank { "Unknown" }
     }
 }

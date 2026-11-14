@@ -16,10 +16,6 @@ data class Track(
     val durationMs: Long,
     val displayName: String
 ) {
-    val albumArtUri: Uri = ContentUris.withAppendedId(
-        Uri.parse("content://media/external/audio/albumart"),
-        id.takeIf { it > 0 } ?: 0L
-    )
     val uniqueKey: String get() = if (id > 0) "m$id" else "u:$uri"
 }
 

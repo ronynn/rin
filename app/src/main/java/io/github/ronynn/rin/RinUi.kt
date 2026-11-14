@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -57,23 +56,12 @@ fun PlayerScreen(vm: PlayerViewModel) {
             .safeDrawingPadding()
     ) {
         val twoCol = maxWidth >= 800.dp || (maxWidth >= 600.dp && maxWidth > maxHeight)
-        val coverSize = when {
-            maxHeight <= 560.dp -> 72.dp
-            maxHeight <= 720.dp -> 96.dp
-            else -> 124.dp
-        }
-        val visHeight = when {
-            maxHeight <= 560.dp -> 56.dp
-            maxHeight <= 720.dp -> 80.dp
-            else -> 120.dp
-        }
+        val coverSize = when { maxHeight <= 560.dp -> 72.dp; maxHeight <= 720.dp -> 96.dp; else -> 124.dp }
+        val visHeight = when { maxHeight <= 560.dp -> 56.dp; maxHeight <= 720.dp -> 80.dp; else -> 120.dp }
 
         if (twoCol) {
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                Column(
-                    Modifier.weight(1f).fillMaxHeight(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
+                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     SettingsPanel(vm, onOpenFile = openFile)
                     PlaylistPanel(vm, Modifier.weight(1f))
                 }
@@ -84,10 +72,7 @@ fun PlayerScreen(vm: PlayerViewModel) {
                 )
             }
         } else {
-            Column(
-                Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 SettingsPanel(vm, onOpenFile = openFile)
                 PlayerPanel(
                     vm, coverSize, visHeight, landscape = false,
@@ -115,7 +100,6 @@ private fun EditMetadataDialog(
     onCancel: () -> Unit
 ) {
     val c = LocalRinColors.current
-    // Key on uniqueKey so opening a different track rebuilds the fields
     var title by remember(track.uniqueKey) { mutableStateOf(track.title) }
     var artist by remember(track.uniqueKey) { mutableStateOf(track.artist) }
     var album by remember(track.uniqueKey) { mutableStateOf(track.album) }
@@ -128,14 +112,12 @@ private fun EditMetadataDialog(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
+            RinText(
                 "EDIT METADATA",
-                style = TextStyle(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = c.accent,
-                    letterSpacing = 1.sp
-                )
+                color = c.accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
             )
             Field("TITLE", title) { title = it }
             Field("ARTIST", artist) { artist = it }
@@ -154,10 +136,7 @@ private fun EditMetadataDialog(
 private fun Field(label: String, value: String, onChange: (String) -> Unit) {
     val c = LocalRinColors.current
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            label,
-            style = TextStyle(fontSize = 10.sp, color = c.accent, letterSpacing = 0.5.sp)
-        )
+        RinText(label, color = c.accent, fontSize = 10.sp, letterSpacing = 0.5.sp)
         BasicTextField(
             value = value,
             onValueChange = onChange,

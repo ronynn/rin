@@ -58,6 +58,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     var editingTrack by mutableStateOf<Track?>(null)
 
+    private var pendingRestore: Pair<Int, Long>? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
     private val prefs get() = getApplication<Application>().getSharedPreferences("rin", 0)
@@ -79,11 +80,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         tracks.forEach { map.getOrPut(it.folder) { mutableListOf() }.add(it) }
         map
     }
-
-    val favoriteTracks by derivedStateOf {
-        tracks.filter { it.uniqueKey in favorites }
-    }
-
+    val favoriteTracks by derivedStateOf { tracks.filter { it.uniqueKey in favorites } }
     val historyTracks by derivedStateOf {
         if (historyIds.isEmpty()) emptyList()
         else {
@@ -91,7 +88,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             historyIds.mapNotNull { byKey[it] }
         }
     }
-
     val searchResults by derivedStateOf {
         if (searchQuery.isBlank()) emptyList()
         else {
@@ -126,6 +122,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 })
                 startTicker()
+                // If scan already completed before we connected, restore now
+                pendingRestore?.let { (idx, pos) ->
+                    setQueue(idx, pos)
+                    pendingRestore = null
+                }
             }, ContextCompat.getMainExecutor(ctx))
         }
     }
@@ -141,12 +142,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             tracks.addAll(overridden)
         }
         status = if (overridden.isEmpty()) "NO MUSIC FOUND" else ""
-        if (controller != null && tracks.isNotEmpty() && currentIndex < 0) {
-            val lastIndex = prefs.getInt("lastIndex", 0).coerceIn(0, tracks.size - 1)
+        if (overridden.isNotEmpty() && currentIndex < 0) {
+            val lastIndex = prefs.getInt("lastIndex", 0).coerceIn(0, overridden.size - 1)
             val lastPos = prefs.getLong("lastPos", 0L)
-            setQueue(lastIndex, lastPos)
-            openFolders = openFolders + (tracks[lastIndex].folder)
+            openFolders = openFolders + overridden[lastIndex].folder
             saveOpenFolders()
+            if (controller != null) setQueue(lastIndex, lastPos)
+            else { currentIndex = lastIndex; pendingRestore = lastIndex to lastPos }
         }
         isScanning = false
         hasScanned = true
@@ -177,11 +179,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun playExternalUris(uris: List<Uri>) { uris.forEach { playExternalUri(it) } }
 
     private fun setQueue(startIndex: Int, startPos: Long) {
+        if (tracks.isEmpty()) {
+            controller?.clearMediaItems()
+            currentIndex = -1
+            return
+        }
+        currentIndex = startIndex  // set UI state immediately
         val c = controller ?: return
-        if (tracks.isEmpty()) { c.clearMediaItems(); currentIndex = -1; return }
         val items = tracks.map { track ->
-            val customCover = coverFile(track).takeIf { it.exists() }?.let { Uri.fromFile(it) }
-            val artworkUri = customCover ?: track.albumArtUri.takeIf { track.id > 0 }
+            val artworkUri = coverFile(track).takeIf { it.exists() }?.let { Uri.fromFile(it) }
             MediaItem.Builder()
                 .setUri(track.uri)
                 .setMediaMetadata(
@@ -196,7 +202,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
         c.setMediaItems(items, startIndex.coerceIn(0, items.size - 1), startPos)
         c.prepare()
-        currentIndex = startIndex
     }
 
     fun playTrack(track: Track) {
@@ -218,13 +223,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         controller?.shuffleModeEnabled = shuffle
         prefs.edit().putBoolean("shuffle", shuffle).apply()
     }
-
     fun cycleRepeat() {
-        repeatMode = when (repeatMode) {
-            "off" -> "all"
-            "all" -> "one"
-            else -> "off"
-        }
+        repeatMode = when (repeatMode) { "off" -> "all"; "all" -> "one"; else -> "off" }
         controller?.repeatMode = when (repeatMode) {
             "all" -> Player.REPEAT_MODE_ALL
             "one" -> Player.REPEAT_MODE_ONE
@@ -232,36 +232,21 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
         prefs.edit().putString("repeat", repeatMode).apply()
     }
-
     fun toggleFav(track: Track) {
         val key = track.uniqueKey
         favorites = if (key in favorites) favorites - key else favorites + key
         prefs.edit().putStringSet("favorites", favorites).apply()
     }
-
     fun isFavorite(track: Track): Boolean = track.uniqueKey in favorites
 
-    fun selectView(tab: String) {
-        viewTab = tab
-        searchQuery = ""
-        isSearchOpen = false
-    }
-
+    fun selectView(tab: String) { viewTab = tab; searchQuery = ""; isSearchOpen = false }
     fun updateSearch(q: String) { searchQuery = q }
-
-    fun toggleSearch() {
-        isSearchOpen = !isSearchOpen
-        if (!isSearchOpen) searchQuery = ""
-    }
-
+    fun toggleSearch() { isSearchOpen = !isSearchOpen; if (!isSearchOpen) searchQuery = "" }
     fun toggleFolder(folder: String) {
         openFolders = if (folder in openFolders) openFolders - folder else openFolders + folder
         saveOpenFolders()
     }
-
-    private fun saveOpenFolders() {
-        prefs.edit().putStringSet("openFolders", openFolders).apply()
-    }
+    private fun saveOpenFolders() { prefs.edit().putStringSet("openFolders", openFolders).apply() }
 
     private fun addToHistory(key: String) {
         val updated = (listOf(key) + historyIds.filter { it != key }).take(50)
@@ -269,19 +254,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString("history", updated.joinToString("\n")).apply()
     }
 
-    fun applyTheme(i: Int) {
-        themeIndex = i
-        prefs.edit().putInt("theme", i).apply()
-    }
-
-    fun applyFont(i: Int) {
-        fontIndex = i
-        prefs.edit().putInt("font", i).apply()
-    }
+    fun applyTheme(i: Int) { themeIndex = i; prefs.edit().putInt("theme", i).apply() }
+    fun applyFont(i: Int) { fontIndex = i; prefs.edit().putInt("font", i).apply() }
 
     fun startEditing(track: Track) { editingTrack = track }
     fun cancelEditing() { editingTrack = null }
-
     fun saveMetadata(title: String, artist: String, album: String) {
         val track = editingTrack ?: return
         val idx = tracks.indexOfFirst { it.uri == track.uri }
@@ -289,10 +266,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val updated = tracks[idx].copy(title = title, artist = artist, album = album)
         tracks[idx] = updated
         prefs.edit().putString("meta_${track.uniqueKey}", "$title\u0001$artist\u0001$album").apply()
-        if (currentIndex == idx) {
-            val pos = controller?.currentPosition ?: 0L
-            setQueue(currentIndex, pos)
-        }
+        if (currentIndex == idx) setQueue(currentIndex, controller?.currentPosition ?: 0L)
         editingTrack = null
     }
 
@@ -309,10 +283,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 positionMs = it.currentPosition.coerceAtLeast(0)
                 durationMs = it.duration.coerceAtLeast(0)
                 progress = if (durationMs > 0) positionMs.toFloat() / durationMs else 0f
-                prefs.edit()
-                    .putInt("lastIndex", currentIndex)
-                    .putLong("lastPos", positionMs)
-                    .apply()
+                prefs.edit().putInt("lastIndex", currentIndex).putLong("lastPos", positionMs).apply()
             }
             delay(200)
         }
@@ -329,8 +300,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun coverModel(track: Track, version: Int): Any {
         val f = coverFile(track)
-        return if (f.exists()) Uri.fromFile(f).buildUpon().appendQueryParameter("v", "$version").build()
-        else track.albumArtUri
+        return if (f.exists())
+            Uri.fromFile(f).buildUpon().appendQueryParameter("v", "$version").build()
+        else track.uri
     }
 
     fun setCustomCover(uri: Uri) {

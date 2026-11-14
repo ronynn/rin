@@ -7,7 +7,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -41,7 +40,7 @@ internal fun SettingsPanel(vm: PlayerViewModel, onOpenFile: () -> Unit) {
                 DropdownMenu(expanded = themeMenu, onDismissRequest = { themeMenu = false }) {
                     Themes.forEachIndexed { i, (name, _) ->
                         DropdownMenuItem(
-                            text = { Text(name.uppercase(), style = TextStyle(fontSize = 12.sp)) },
+                            text = { RinText(name.uppercase(), fontSize = 12.sp) },
                             onClick = { vm.applyTheme(i); themeMenu = false }
                         )
                     }
@@ -55,7 +54,7 @@ internal fun SettingsPanel(vm: PlayerViewModel, onOpenFile: () -> Unit) {
                 DropdownMenu(expanded = fontMenu, onDismissRequest = { fontMenu = false }) {
                     Fonts.forEachIndexed { i, (name, _) ->
                         DropdownMenuItem(
-                            text = { Text(name.uppercase(), style = TextStyle(fontSize = 12.sp)) },
+                            text = { RinText(name.uppercase(), fontSize = 12.sp) },
                             onClick = { vm.applyFont(i); fontMenu = false }
                         )
                     }
@@ -63,9 +62,10 @@ internal fun SettingsPanel(vm: PlayerViewModel, onOpenFile: () -> Unit) {
             }
         }
         if (vm.status.isNotEmpty()) {
-            Text(
+            RinText(
                 vm.status,
-                style = TextStyle(fontSize = 10.sp, color = c.accent),
+                color = c.accent,
+                fontSize = 10.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -96,14 +96,7 @@ internal fun PlayerPanel(
                     val v = vm.coverVersion
                     RinImage(remember(v, track) { vm.coverModel(track, v) }, Modifier.fillMaxSize())
                 } else {
-                    Text(
-                        "♪",
-                        style = TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 34.sp,
-                            color = c.accent
-                        )
-                    )
+                    RinText("♪", color = c.accent, fontSize = 34.sp, fontWeight = FontWeight.Bold)
                 }
             }
             Column(
@@ -114,27 +107,27 @@ internal fun PlayerPanel(
                     },
                 verticalArrangement = Arrangement.Center
             ) {
-                Text(
+                RinText(
                     track?.title ?: "NO TRACK LOADED",
-                    style = TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = c.fg,
-                        lineHeight = 17.sp
-                    ),
+                    color = c.fg,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 17.sp
                 )
                 Spacer(Modifier.height(4.dp))
-                Text(
+                RinText(
                     track?.artist ?: "UNKNOWN ARTIST",
-                    style = TextStyle(fontSize = 11.5.sp, color = c.accent),
+                    color = c.accent,
+                    fontSize = 11.5.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
+                RinText(
                     track?.album ?: "UNKNOWN ALBUM",
-                    style = TextStyle(fontSize = 11.5.sp, color = c.accent),
+                    color = c.accent,
+                    fontSize = 11.5.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -149,28 +142,26 @@ internal fun PlayerPanel(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconBtn("⇆", active = vm.shuffle) { vm.toggleShuffle() }
+            ToggleBtn("⇆", active = vm.shuffle) { vm.toggleShuffle() }
             Spacer(Modifier.width(12.dp))
             TransportButton("◀◀") { vm.previous() }
             Spacer(Modifier.width(12.dp))
             Box(
-                Modifier.size(42.dp).border(2.dp, c.border, CircleShape).background(c.bg)
+                Modifier.size(42.dp).border(2.dp, c.border).background(c.bg)
                     .clickable { vm.togglePlay() },
                 contentAlignment = Alignment.Center
             ) {
-                Text(
+                RinText(
                     if (vm.isPlaying) "❚❚" else "▶",
-                    style = TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = c.fg
-                    )
+                    color = c.fg,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
             Spacer(Modifier.width(12.dp))
             TransportButton("▶▶") { vm.next() }
             Spacer(Modifier.width(12.dp))
-            IconBtn(if (vm.repeatMode == "one") "↻1" else "↻", active = vm.repeatMode != "off") {
+            ToggleBtn(if (vm.repeatMode == "one") "↻1" else "↻", active = vm.repeatMode != "off") {
                 vm.cycleRepeat()
             }
         }
@@ -179,9 +170,9 @@ internal fun PlayerPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(vm.format(vm.positionMs), style = TextStyle(fontSize = 10.sp, color = c.fg))
+            RinText(vm.format(vm.positionMs), color = c.fg, fontSize = 10.sp)
             ProgressBar(vm.progress, Modifier.weight(1f)) { vm.seekToFraction(it) }
-            Text(vm.format(vm.durationMs), style = TextStyle(fontSize = 10.sp, color = c.fg))
+            RinText(vm.format(vm.durationMs), color = c.fg, fontSize = 10.sp)
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -208,7 +199,7 @@ internal fun PlaylistPanel(vm: PlayerViewModel, modifier: Modifier = Modifier) {
                 textStyle = TextStyle(color = c.fg, fontSize = 12.sp),
                 decorationBox = { inner ->
                     if (vm.searchQuery.isEmpty())
-                        Text("Search…", style = TextStyle(color = c.dim, fontSize = 12.sp))
+                        RinText("Search…", color = c.dim, fontSize = 12.sp)
                     inner()
                 }
             )
@@ -220,13 +211,10 @@ internal fun PlaylistPanel(vm: PlayerViewModel, modifier: Modifier = Modifier) {
 @Composable
 private fun PlaylistContent(vm: PlayerViewModel, modifier: Modifier) {
     val c = LocalRinColors.current
-    if (!vm.hasScanned || vm.isScanning) {
-        Box(modifier.fillMaxSize())
-        return
-    }
+    if (!vm.hasScanned || vm.isScanning) { Box(modifier.fillMaxSize()); return }
     if (vm.tracks.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("NO MUSIC FOUND", style = TextStyle(fontSize = 11.sp, color = c.accent))
+            RinText("NO MUSIC FOUND", color = c.accent, fontSize = 11.sp)
         }
         return
     }
@@ -235,7 +223,7 @@ private fun PlaylistContent(vm: PlayerViewModel, modifier: Modifier) {
         val results = vm.searchResults
         if (results.isEmpty()) {
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("NO RESULTS", style = TextStyle(fontSize = 11.sp, color = c.accent))
+                RinText("NO RESULTS", color = c.accent, fontSize = 11.sp)
             }
         } else {
             LazyColumn(modifier.fillMaxSize().border(2.dp, c.border).background(c.bg)) {

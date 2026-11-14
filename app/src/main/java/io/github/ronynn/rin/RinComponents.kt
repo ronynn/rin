@@ -2,7 +2,9 @@ package io.github.ronynn.rin
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -29,9 +31,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +45,35 @@ private object BitmapCache {
     fun put(k: String, b: Bitmap) { if (map.size > 20) map.clear(); map[k] = b }
 }
 
+/** Text that always inherits the current font family and weight from LocalRinFont. */
+@Composable
+internal fun RinText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontSize: TextUnit = TextUnit.Unspecified,
+    fontWeight: FontWeight? = null,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
+    lineHeight: TextUnit = TextUnit.Unspecified
+) {
+    val font = LocalRinFont.current
+    val c = LocalRinColors.current
+    Text(
+        text = text,
+        modifier = modifier,
+        color = if (color == Color.Unspecified) c.fg else color,
+        fontSize = if (fontSize == TextUnit.Unspecified) 12.sp else fontSize,
+        fontWeight = fontWeight ?: font.weight,
+        fontFamily = font.family,
+        maxLines = maxLines,
+        overflow = overflow,
+        letterSpacing = letterSpacing,
+        lineHeight = lineHeight
+    )
+}
+
 @Composable
 internal fun RinImage(model: Any?, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
@@ -51,14 +82,33 @@ internal fun RinImage(model: Any?, modifier: Modifier = Modifier) {
         val uri = model as? Uri ?: return@LaunchedEffect
         val key = uri.toString()
         BitmapCache.get(key)?.let { bmp = it; return@LaunchedEffect }
-        bmp = withContext(Dispatchers.IO) {
-            runCatching {
-                ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
-            }.getOrNull()
-        }
+        bmp = withContext(Dispatchers.IO) { loadBitmap(ctx, uri) }
         bmp?.let { BitmapCache.put(key, it) }
     }
     bmp?.let { Image(it.asImageBitmap(), null, modifier, contentScale = ContentScale.Crop) }
+}
+
+private fun loadBitmap(context: android.content.Context, uri: Uri): Bitmap? {
+    return try {
+        if (uri.scheme == "file") {
+            BitmapFactory.decodeFile(uri.path)
+        } else if (Build.VERSION.SDK_INT >= 29) {
+            try {
+                context.contentResolver.loadThumbnail(uri, android.util.Size(512, 512), null)
+            } catch (_: Exception) { fromMmr(context, uri) }
+        } else {
+            fromMmr(context, uri)
+        }
+    } catch (_: Exception) { null }
+}
+
+private fun fromMmr(context: android.content.Context, uri: Uri): Bitmap? {
+    val mmr = MediaMetadataRetriever()
+    return try {
+        mmr.setDataSource(context, uri)
+        val bytes = mmr.embeddedPicture
+        if (bytes != null) BitmapFactory.decodeByteArray(bytes, 0, bytes.size) else null
+    } catch (_: Exception) { null } finally { runCatching { mmr.release() } }
 }
 
 @Composable
@@ -77,7 +127,7 @@ internal fun Fieldset(
             Modifier.fillMaxWidth()
                 .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier)
                 .padding(top = if (c.isGlass) 9.dp else 7.dp)
-                .then(if (c.isGlass) Modifier.shadow(4.dp, shape, clip = false) else Modifier)
+                .then(if (c.isGlass) Modifier.shadow(6.dp, shape, clip = false) else Modifier)
                 .border(borderWidth, c.border, shape)
                 .background(c.panel, shape)
                 .padding(6.dp),
@@ -85,15 +135,13 @@ internal fun Fieldset(
             content = content
         )
         if (!c.isGlass) {
-            Text(
+            RinText(
                 legend.uppercase(),
                 Modifier.padding(start = 14.dp).background(c.panel).padding(horizontal = 6.dp),
-                style = TextStyle(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    letterSpacing = 1.sp,
-                    color = c.accent
-                )
+                color = c.accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
             )
         }
     }
@@ -111,39 +159,55 @@ internal fun RinButton(
     OutlinedButton(
         onClick = onClick,
         modifier = modifier.height(34.dp),
-        border = BorderStroke(if (c.isGlass) 1.dp else 2.dp, c.border),
+        border = if (c.isGlass) null else BorderStroke(2.dp, c.border),
         shape = shape,
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (selected) c.fg else Color.Transparent,
+            containerColor = when {
+                selected -> c.fg
+                c.isGlass -> Color.White.copy(alpha = 0.55f)
+                else -> Color.Transparent
+            },
             contentColor = if (selected) c.bg else c.fg
         ),
-        contentPadding = PaddingValues(0.dp)
+        contentPadding = PaddingValues(0.dp),
+        elevation = if (c.isGlass)
+            ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+        else null
     ) {
-        Text(text, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp), maxLines = 1)
+        RinText(text, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
 @Composable
-internal fun IconBtn(label: String, active: Boolean, onClick: () -> Unit) {
+internal fun ToggleBtn(label: String, active: Boolean, onClick: () -> Unit) {
     val c = LocalRinColors.current
-    Text(
-        label,
-        Modifier.clickable(onClick = onClick).padding(6.dp),
-        style = TextStyle(
-            fontWeight = FontWeight.Bold,
-            fontSize = 18.sp,
-            color = if (active) c.accent else c.dim
+    Box(
+        Modifier
+            .background(
+                if (active) c.accent else Color.Transparent,
+                RoundedCornerShape(4.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        RinText(
+            label,
+            color = if (active) c.bg else c.dim,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
         )
-    )
+    }
 }
 
 @Composable
 internal fun TransportButton(label: String, onClick: () -> Unit) {
     val c = LocalRinColors.current
-    Text(
+    RinText(
         label,
         Modifier.clickable(onClick = onClick).padding(6.dp),
-        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp, color = c.fg)
+        color = c.fg,
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Bold
     )
 }
 
@@ -184,23 +248,22 @@ internal fun FolderHeader(name: String, count: Int, open: Boolean, onToggle: (()
             .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
+        RinText(
             if (onToggle != null) (if (open) "▼ " else "▶ ") else "",
-            style = TextStyle(fontSize = 9.sp, color = c.dim)
+            color = c.dim,
+            fontSize = 9.sp
         )
-        Text(
+        RinText(
             name.uppercase(),
             Modifier.weight(1f),
-            style = TextStyle(
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
-                color = c.accent,
-                letterSpacing = 1.sp
-            ),
+            color = c.accent,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Text("($count)", style = TextStyle(fontSize = 9.sp, color = c.dim))
+        RinText("($count)", color = c.dim, fontSize = 9.sp)
     }
     HorizontalDivider(color = c.listHover, thickness = 1.dp)
 }
@@ -209,7 +272,7 @@ internal fun FolderHeader(name: String, count: Int, open: Boolean, onToggle: (()
 internal fun EmptyRow(text: String) {
     val c = LocalRinColors.current
     Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-        Text(text, style = TextStyle(fontSize = 10.sp, color = c.accent, letterSpacing = 1.sp))
+        RinText(text, color = c.accent, fontSize = 10.sp, letterSpacing = 1.sp)
     }
 }
 
@@ -226,26 +289,26 @@ internal fun TrackRow(vm: PlayerViewModel, track: Track, displayIdx: Int?) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (displayIdx != null) {
-            Text(
+            RinText(
                 "${(displayIdx + 1).toString().padStart(2, '0')}. ",
-                style = TextStyle(fontSize = 11.sp, color = if (active) c.bg else c.fg)
+                color = if (active) c.bg else c.fg,
+                fontSize = 11.sp
             )
         }
-        Text(
+        RinText(
             track.title,
             Modifier.weight(1f),
-            style = TextStyle(
-                fontSize = 11.sp,
-                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                color = if (active) c.bg else c.fg
-            ),
+            color = if (active) c.bg else c.fg,
+            fontSize = 11.sp,
+            fontWeight = if (active) FontWeight.Bold else null,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Text(
+        RinText(
             if (fav) "★" else "☆",
             Modifier.padding(start = 6.dp).clickable { vm.toggleFav(track) },
-            style = TextStyle(fontSize = 14.sp, color = if (active) c.bg else c.accent)
+            color = if (active) c.bg else c.accent,
+            fontSize = 14.sp
         )
     }
     HorizontalDivider(color = c.listHover, thickness = 1.dp)

@@ -1,5 +1,6 @@
 package io.github.ronynn.rin
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
@@ -50,12 +51,9 @@ class PlayerService : MediaSessionService() {
                     pcmData.position(pcmData.position() + toSkip)
                 }
                 val trimmed = if (i == targetSize) out else out.copyOf(i)
-
-                // Exponential smoothing — matches AnalyserNode's smoothingTimeConstant = 0.85
                 val smoothed = prevWave?.takeIf { it.size == trimmed.size }?.let { p ->
                     FloatArray(trimmed.size) { idx -> p[idx] * 0.85f + trimmed[idx] * 0.15f }
                 } ?: trimmed
-
                 prevWave = smoothed
                 waveform.value = smoothed
             }
@@ -100,7 +98,18 @@ class PlayerService : MediaSessionService() {
             }
         })
 
-        session = MediaSession.Builder(this, player).build()
+        // Tap the notification → open the app
+        val launchIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val sessionActivity = PendingIntent.getActivity(
+            this, 0, launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        session = MediaSession.Builder(this, player)
+            .setSessionActivity(sessionActivity)
+            .build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session

@@ -9,13 +9,11 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.BitmapLoader
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
-import java.io.File
 
 class TrackArtworkLoader(private val context: Context) : BitmapLoader {
 
-    override fun supportsMimeType(mimeType: String): Boolean {
-        return mimeType.startsWith("image/") || mimeType.startsWith("audio/")
-    }
+    override fun supportsMimeType(mimeType: String): Boolean =
+        mimeType.startsWith("image/") || mimeType.startsWith("audio/")
 
     override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> {
         val bmp = BitmapFactory.decodeByteArray(data, 0, data.size)
@@ -34,9 +32,7 @@ class TrackArtworkLoader(private val context: Context) : BitmapLoader {
                 }
                 else -> loadEmbeddedArt(uri)
             }
-        } catch (e: Exception) {
-            Futures.immediateFailedFuture(e)
-        }
+        } catch (e: Exception) { Futures.immediateFailedFuture(e) }
     }
 
     private fun loadEmbeddedArt(uri: Uri): ListenableFuture<Bitmap> {
@@ -61,6 +57,4 @@ class TrackArtworkLoader(private val context: Context) : BitmapLoader {
         metadata.artworkUri?.let { return loadBitmap(it) }
         return Futures.immediateFailedFuture(IllegalArgumentException("No artwork"))
     }
-
-    override fun close() {}
 }

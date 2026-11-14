@@ -5,8 +5,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.LayerDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -120,21 +118,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun buildWindowBackground(colors: RinColors): Drawable {
-        if (!colors.isGlass || colors.blobs.isEmpty()) {
-            return ColorDrawable(colors.bg.toArgb())
-        }
-        val minDim = minOf(resources.displayMetrics.widthPixels,
-                          resources.displayMetrics.heightPixels).toFloat()
-        val layers = mutableListOf<Drawable>()
-        layers.add(ColorDrawable(colors.bg.toArgb()))
-        colors.blobs.forEach { blob ->
-            val g = GradientDrawable()
-            g.gradientType = GradientDrawable.RADIAL_GRADIENT
-            g.colors = intArrayOf(blob.color.toArgb(), 0)
-            g.setGradientCenter(blob.cx, blob.cy)
-            g.gradientRadius = blob.r * minDim
-            layers.add(g)
-        }
-        return LayerDrawable(layers.toTypedArray())
+        return ColorDrawable(colors.bg.toArgb())
     }
 }

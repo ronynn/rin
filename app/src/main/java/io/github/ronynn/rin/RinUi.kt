@@ -10,9 +10,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -39,29 +36,27 @@ fun PlayerScreen(vm: PlayerViewModel) {
 
     BoxWithConstraints(
         Modifier.fillMaxSize()
-            .drawBehind {
-                drawRect(c.bg)
-                c.blobs.forEach { blob ->
-                    val center = Offset(size.width * blob.cx, size.height * blob.cy)
-                    val radius = size.minDimension * blob.r
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(blob.color, Color.Transparent),
-                            center = center,
-                            radius = radius
-                        )
-                    )
-                }
-            }
+            .drawBehind { drawRect(c.bg) }
             .safeDrawingPadding()
     ) {
         val twoCol = maxWidth >= 800.dp || (maxWidth >= 600.dp && maxWidth > maxHeight)
-        val coverSize = when { maxHeight <= 560.dp -> 72.dp; maxHeight <= 720.dp -> 96.dp; else -> 124.dp }
-        val visHeight = when { maxHeight <= 560.dp -> 56.dp; maxHeight <= 720.dp -> 80.dp; else -> 120.dp }
+        val coverSize = when {
+            maxHeight <= 560.dp -> 72.dp
+            maxHeight <= 720.dp -> 96.dp
+            else -> 124.dp
+        }
+        val visHeight = when {
+            maxHeight <= 560.dp -> 56.dp
+            maxHeight <= 720.dp -> 80.dp
+            else -> 120.dp
+        }
 
         if (twoCol) {
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(
+                    Modifier.weight(1f).fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     SettingsPanel(vm, onOpenFile = openFile)
                     PlaylistPanel(vm, Modifier.weight(1f))
                 }
@@ -72,7 +67,10 @@ fun PlayerScreen(vm: PlayerViewModel) {
                 )
             }
         } else {
-            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(
+                Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 SettingsPanel(vm, onOpenFile = openFile)
                 PlayerPanel(
                     vm, coverSize, visHeight, landscape = false,

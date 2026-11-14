@@ -12,8 +12,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 
-data class RadialBlob(val color: Color, val cx: Float, val cy: Float, val r: Float)
-
 data class RinColors(
     val bg: Color, val fg: Color, val accent: Color, val dim: Color,
     val panel: Color, val listHover: Color, val border: Color,
